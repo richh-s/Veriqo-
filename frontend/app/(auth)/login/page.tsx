@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { CheckSquare, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -108,6 +109,13 @@ export default function LoginPage() {
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-gray-500">Don't have an account?</span>{' '}
+            <Link href="/register" className="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+              Create an account
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

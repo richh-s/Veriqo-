@@ -10,9 +10,10 @@ import { logout } from '@/lib/auth'
 
 const navItems = [
   { href: '/dashboard',     label: 'Dashboard',      icon: LayoutDashboard },
-  { href: '/applicants',    label: 'Applicants',     icon: Users },
+  { href: '/applicants',    label: 'Applicants',     icon: ScrollText },
   { href: '/workflows',     label: 'Workflows',      icon: GitBranch },
   { href: '/instances',     label: 'Instances',      icon: Activity },
+  { href: '/users',         label: 'Team',           icon: Users },
   { href: '/notifications', label: 'Notifications',  icon: Bell },
 ]
 

@@ -2,7 +2,7 @@ import type {
   User, Applicant, Workflow, WorkflowInstance,
   Notification, AuditLog, AuditAction, CommunicationLog,
   AnalyticsOverview, TenantSummary, PaginatedResponse,
-  LoginRequest, RegisterRequest,
+  LoginRequest, RegisterRequest, InviteUserRequest,
   ApplicantCreate, ApplicantUpdate, ApplicantStatus,
   WorkflowCreate, WorkflowUpdate,
   InstanceCreate, InstanceStatus, StepUpdate,
@@ -123,6 +123,11 @@ export const api = {
         method: 'POST', body: JSON.stringify(data),
       }),
     me: () => request<User>('/api/v1/auth/me'),
+    listUsers: () => request<User[]>('/api/v1/auth/users'),
+    invite: (data: InviteUserRequest) =>
+      request<User>('/api/v1/auth/invite', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
   },
 
   applicants: {

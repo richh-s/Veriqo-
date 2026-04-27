@@ -26,6 +26,7 @@ export interface User {
   full_name: string
   role: UserRole
   is_active: boolean
+  created_at: string
 }
 
 export interface Applicant {
@@ -165,6 +166,15 @@ export interface TenantSummary {
 export interface LoginRequest {
   email: string
   password: string
+}
+
+export type UserOut = User
+
+export interface InviteUserRequest {
+  email: string
+  full_name: string
+  password: string
+  role: UserRole
 }
 
 export interface RegisterRequest {
