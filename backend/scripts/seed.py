@@ -41,13 +41,21 @@ async def seed():
     async with AsyncSessionLocal() as db:
         # ── Superadmin ────────────────────────────────────────────
         existing = await db.execute(select(SuperAdmin).where(SuperAdmin.email == "super@veriqo.com"))
-        if not existing.scalar_one_or_none():
-            sa = SuperAdmin(email="super@veriqo.com", hashed_password=hash_password("Admin123"), full_name="Super Admin")
+        sa = existing.scalar_one_or_none()
+        if not sa:
+            sa = SuperAdmin(
+                email="super@veriqo.com",
+                hashed_password=hash_password("Admin123"),
+                full_name="Super Admin",
+                is_active=True
+            )
             db.add(sa)
-            await db.flush()
             print("✓ Superadmin created: super@veriqo.com / Admin123")
         else:
-            print("· Superadmin already exists, skipping")
+            sa.hashed_password = hash_password("Admin123")
+            sa.is_active = True
+            print("✓ Superadmin password reset to: Admin123")
+        await db.flush()
 
         # ── Tenant ────────────────────────────────────────────────
         existing_tenant = await db.execute(select(Tenant).where(Tenant.slug == "acme"))
