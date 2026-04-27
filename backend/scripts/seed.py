@@ -42,7 +42,7 @@ async def seed():
         # ── Superadmin ────────────────────────────────────────────
         existing = await db.execute(select(SuperAdmin).where(SuperAdmin.email == "super@veriqo.com"))
         if not existing.scalar_one_or_none():
-            sa = SuperAdmin(email="super@veriqo.com", hashed_password=hash_password("Admin123"))
+            sa = SuperAdmin(email="super@veriqo.com", hashed_password=hash_password("Admin123"), full_name="Super Admin")
             db.add(sa)
             await db.flush()
             print("✓ Superadmin created: super@veriqo.com / Admin123")
@@ -139,7 +139,7 @@ async def seed():
                 (2, "ID verification", StepType.manual, {}),
                 (3, "Employment history check", StepType.manual, {}),
                 (4, "Criminal record check", StepType.manual, {}),
-                (5, "Final review", StepType.review, {}),
+                (5, "Final review", StepType.manual, {}),
             ]
             wf1_steps = []
             for order, name, stype, config in steps_wf1:
@@ -178,7 +178,7 @@ async def seed():
             for order, name, stype in [
                 (1, "Notify applicant", StepType.email),
                 (2, "ID check", StepType.manual),
-                (3, "Approval", StepType.review),
+                (3, "Approval", StepType.manual),
             ]:
                 db.add(WorkflowStep(workflow_id=wf2.id, name=name, step_type=stype, order=order, config={}))
             await db.flush()

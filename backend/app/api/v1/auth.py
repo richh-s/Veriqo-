@@ -12,13 +12,13 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-@limiter.limit("5/minute")
+@limiter.limit("100/minute")
 async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return await auth_service.register_tenant(data, db)
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
+@limiter.limit("100/minute")
 async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await auth_service.login(data, db)
 

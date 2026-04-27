@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, timedelta, datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, case, cast, Integer
 from app.models.workflow_instance import WorkflowInstance, WorkflowStepInstance, InstanceStatus, StepInstanceStatus
 from app.models.applicant import Applicant
 from app.models.workflow import Workflow
@@ -116,15 +116,9 @@ async def _get_step_completion_rates(
         select(
             WorkflowStep.name,
             func.count(WorkflowStepInstance.id).label("total"),
-            func.sum(
-                func.cast(WorkflowStepInstance.status == StepInstanceStatus.completed, type_=None)
-            ).label("completed"),
-            func.sum(
-                func.cast(WorkflowStepInstance.status == StepInstanceStatus.skipped, type_=None)
-            ).label("skipped"),
-            func.sum(
-                func.cast(WorkflowStepInstance.status == StepInstanceStatus.failed, type_=None)
-            ).label("failed"),
+            func.sum(cast(WorkflowStepInstance.status == StepInstanceStatus.completed, Integer)).label("completed"),
+            func.sum(cast(WorkflowStepInstance.status == StepInstanceStatus.skipped, Integer)).label("skipped"),
+            func.sum(cast(WorkflowStepInstance.status == StepInstanceStatus.failed, Integer)).label("failed"),
         )
         .join(WorkflowStepInstance, WorkflowStepInstance.step_id == WorkflowStep.id)
         .join(WorkflowInstance, WorkflowInstance.id == WorkflowStepInstance.instance_id)

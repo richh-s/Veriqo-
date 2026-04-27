@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckSquare } from 'lucide-react'
+import { CheckSquare, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [touched, setTouched]   = useState({ email: false, password: false })
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const emailError    = touched.email    && !email              ? 'Email is required'             : ''
   const passwordError = touched.password && !password           ? 'Password is required'          :
@@ -75,16 +76,25 @@ export default function LoginPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                className={passwordError ? 'border-red-300 focus:border-red-400' : ''}
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                  className={passwordError ? 'border-red-300 focus:border-red-400 pr-10' : 'pr-10'}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <FieldError msg={passwordError} />
             </div>
 
