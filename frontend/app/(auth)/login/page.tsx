@@ -9,15 +9,29 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { loginAndStoreUser } from '@/lib/auth'
 
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null
+  return <p className="text-xs text-red-600 mt-1">{msg}</p>
+}
+
 export default function LoginPage() {
   const router  = useRouter()
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
+  const [touched, setTouched]   = useState({ email: false, password: false })
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
+  const emailError    = touched.email    && !email              ? 'Email is required'             : ''
+  const passwordError = touched.password && !password           ? 'Password is required'          :
+                        touched.password && password.length < 8 ? 'Must be at least 8 characters' : ''
+
+  const isValid = !!email && !!password && password.length >= 8
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setTouched({ email: true, password: true })
+    if (!isValid) return
     setError('')
     setLoading(true)
     try {
@@ -32,10 +46,9 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-sm">
-      {/* Brand mark */}
       <div className="flex items-center justify-center gap-2 mb-8">
         <CheckSquare className="h-6 w-6 text-blue-600" />
-        <span className="text-xl font-semibold text-gray-900">CheckFlow</span>
+        <span className="text-xl font-semibold text-gray-900">Veriqo</span>
       </div>
 
       <Card>
@@ -44,7 +57,7 @@ export default function LoginPage() {
           <CardDescription>Enter your credentials to access your workspace.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -53,8 +66,11 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                className={emailError ? 'border-red-300 focus:border-red-400' : ''}
                 required
               />
+              <FieldError msg={emailError} />
             </div>
 
             <div className="space-y-1.5">
@@ -65,8 +81,11 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+                className={passwordError ? 'border-red-300 focus:border-red-400' : ''}
                 required
               />
+              <FieldError msg={passwordError} />
             </div>
 
             {error && (

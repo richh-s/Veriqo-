@@ -18,7 +18,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
-      <div className="flex flex-1 flex-col pl-60">
+      {/* On mobile: no left padding (sidebar is overlay). On md+: offset by sidebar width */}
+      <div className="flex flex-1 flex-col md:pl-60 min-w-0">
         {children}
       </div>
     </div>

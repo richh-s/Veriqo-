@@ -34,7 +34,7 @@ export default function WorkflowDetailPage() {
     async function load() {
       const [wf, apps] = await Promise.all([api.workflows.get(id), api.applicants.list()])
       setWorkflow(wf)
-      setApplicants(apps)
+      setApplicants(apps.items)
       setLoading(false)
     }
     load()

@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCw, Copy, Check } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Copy, Check, Mail, MessageSquarePlus, SendHorizontal, Inbox } from 'lucide-react'
 import { Navbar } from '@/components/shared/navbar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { api } from '@/lib/api'
 import {
-  instanceStatusConfig, stepStatusConfig, stepTypeConfig, formatDate, formatDateTime,
+  instanceStatusConfig, stepStatusConfig, stepTypeConfig, formatDate, formatDateTime, cn,
 } from '@/lib/utils'
-import type { WorkflowInstance, Applicant, Workflow, StepInstance, StepInstanceStatus } from '@/types'
+import type { WorkflowInstance, Applicant, Workflow, StepInstance, StepInstanceStatus, CommunicationLog, CommunicationDirection } from '@/types'
 
 const ADVANCE_ACTIONS: { status: StepInstanceStatus; label: string; className: string }[] = [
   { status: 'completed', label: 'Mark complete', className: 'bg-green-600 hover:bg-green-700 text-white' },
@@ -33,6 +34,16 @@ export default function InstanceDetailPage() {
   const [copied, setCopied]       = useState<string | null>(null)
   const [notes, setNotes]         = useState<Record<string, string>>({})
 
+  // Communication log state
+  const [comms, setComms]             = useState<CommunicationLog[]>([])
+  const [commsLoading, setCommsLoading] = useState(false)
+  const [logOpen, setLogOpen]         = useState(false)
+  const [logDir, setLogDir]           = useState<CommunicationDirection>('sent')
+  const [logSubject, setLogSubject]   = useState('')
+  const [logBody, setLogBody]         = useState('')
+  const [logRecipient, setLogRecipient] = useState('')
+  const [logSaving, setLogSaving]     = useState(false)
+
   useEffect(() => {
     async function load() {
       const inst = await api.instances.get(id)
@@ -46,7 +57,39 @@ export default function InstanceDetailPage() {
       setLoading(false)
     }
     load()
+    loadComms()
   }, [id])
+
+  async function loadComms() {
+    setCommsLoading(true)
+    try {
+      const res = await api.communications.list({ instance_id: id, per_page: 50 })
+      setComms(res.items)
+    } finally {
+      setCommsLoading(false)
+    }
+  }
+
+  async function handleLogComm(e: React.FormEvent) {
+    e.preventDefault()
+    setLogSaving(true)
+    try {
+      await api.communications.create({
+        instance_id: id,
+        direction: logDir,
+        recipient_email: logRecipient || undefined,
+        subject: logSubject,
+        body: logBody,
+      })
+      setLogSubject('')
+      setLogBody('')
+      setLogRecipient('')
+      setLogOpen(false)
+      await loadComms()
+    } finally {
+      setLogSaving(false)
+    }
+  }
 
   async function handleAdvance(stepInstance: StepInstance, status: StepInstanceStatus) {
     setAdvancing(stepInstance.id)
@@ -128,6 +171,113 @@ export default function InstanceDetailPage() {
               ) : null
             })()}
           </CardContent>
+        </Card>
+
+        {/* Communication log */}
+        <Card>
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-gray-400" />
+              <h2 className="text-sm font-semibold text-gray-900">Communication Log</h2>
+              {comms.length > 0 && <span className="text-xs text-gray-400">({comms.length})</span>}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => setLogOpen((o) => !o)}
+            >
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+              Log communication
+            </Button>
+          </div>
+
+          {logOpen && (
+            <form onSubmit={handleLogComm} className="border-b border-gray-100 px-5 py-4 space-y-3 bg-gray-50/50">
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-medium text-gray-600">Direction</label>
+                <div className="flex gap-2">
+                  {(['sent', 'received'] as CommunicationDirection[]).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setLogDir(d)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                        logDir === d ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 text-gray-600 hover:bg-gray-100'
+                      )}
+                    >
+                      {d === 'sent' ? <SendHorizontal className="h-3 w-3" /> : <Inbox className="h-3 w-3" />}
+                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <Input
+                placeholder="Recipient email (optional)"
+                value={logRecipient}
+                onChange={(e) => setLogRecipient(e.target.value)}
+                className="text-sm"
+              />
+              <Input
+                placeholder="Subject *"
+                value={logSubject}
+                onChange={(e) => setLogSubject(e.target.value)}
+                required
+                className="text-sm"
+              />
+              <Textarea
+                placeholder="Message body *"
+                value={logBody}
+                onChange={(e) => setLogBody(e.target.value)}
+                required
+                rows={3}
+                className="text-sm"
+              />
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={logSaving} className="text-xs">
+                  {logSaving ? 'Saving…' : 'Save entry'}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="text-xs" onClick={() => setLogOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {commsLoading ? (
+            <div className="py-6 text-center text-sm text-gray-400">Loading…</div>
+          ) : comms.length === 0 ? (
+            <div className="py-6 text-center text-sm text-gray-400">No communications logged yet.</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {comms.map((c) => (
+                <div key={c.id} className="px-5 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Badge className={c.direction === 'sent'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-teal-50 text-teal-700 border-teal-200'
+                        }>
+                          {c.direction === 'sent'
+                            ? <><SendHorizontal className="h-3 w-3 mr-1 inline" />Sent</>
+                            : <><Inbox className="h-3 w-3 mr-1 inline" />Received</>
+                          }
+                        </Badge>
+                        <span className="text-sm font-medium text-gray-900 truncate">{c.subject}</span>
+                      </div>
+                      {c.recipient_email && (
+                        <p className="text-xs text-gray-400 mb-1">{c.recipient_email}</p>
+                      )}
+                      <p className="text-sm text-gray-600 line-clamp-2">{c.body}</p>
+                    </div>
+                    <span className="text-xs text-gray-400 shrink-0 whitespace-nowrap">{formatDateTime(c.created_at)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Step instances */}

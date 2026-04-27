@@ -1,15 +1,17 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
 
 from app.models.applicant import Applicant
 from app.models.workflow import Workflow, StepType
 from app.models.workflow_instance import WorkflowInstance, WorkflowStepInstance, InstanceStatus, StepInstanceStatus
+from app.models.audit_log import AuditAction
 from app.schemas.workflow_instance import WorkflowInstanceCreate, StepInstanceUpdate, WorkflowInstanceOut
-from app.services import groq_service
+from app.schemas.common import PaginatedResponse
+from app.services import groq_service, audit_service, notification_service
 
 
 async def _load_instance(
@@ -28,14 +30,44 @@ async def _load_instance(
     return instance
 
 
-async def list_instances(tenant_id: uuid.UUID, db: AsyncSession) -> list[WorkflowInstanceOut]:
-    result = await db.execute(
-        select(WorkflowInstance)
-        .where(WorkflowInstance.tenant_id == tenant_id)
+async def list_instances(
+    tenant_id: uuid.UUID,
+    db: AsyncSession,
+    page: int = 1,
+    per_page: int = 20,
+    status_filter: InstanceStatus | None = None,
+    applicant_id: uuid.UUID | None = None,
+    workflow_id: uuid.UUID | None = None,
+) -> PaginatedResponse[WorkflowInstanceOut]:
+    query = select(WorkflowInstance).where(WorkflowInstance.tenant_id == tenant_id)
+
+    if status_filter:
+        query = query.where(WorkflowInstance.status == status_filter)
+    if applicant_id:
+        query = query.where(WorkflowInstance.applicant_id == applicant_id)
+    if workflow_id:
+        query = query.where(WorkflowInstance.workflow_id == workflow_id)
+
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = count_result.scalar_one()
+
+    query = (
+        query
         .options(selectinload(WorkflowInstance.step_instances))
         .order_by(WorkflowInstance.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
     )
-    return [WorkflowInstanceOut.model_validate(i) for i in result.scalars().all()]
+    result = await db.execute(query)
+    items = [WorkflowInstanceOut.model_validate(i) for i in result.scalars().all()]
+
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=(total + per_page - 1) // per_page,
+    )
 
 
 async def get_instance(
@@ -46,9 +78,8 @@ async def get_instance(
 
 
 async def create_instance(
-    data: WorkflowInstanceCreate, tenant_id: uuid.UUID, db: AsyncSession
+    data: WorkflowInstanceCreate, tenant_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession
 ) -> WorkflowInstanceOut:
-    # Validate workflow belongs to this tenant
     wf_result = await db.execute(
         select(Workflow)
         .where(Workflow.id == data.workflow_id, Workflow.tenant_id == tenant_id)
@@ -60,7 +91,6 @@ async def create_instance(
     if not workflow.is_active:
         raise HTTPException(status_code=400, detail="Workflow is inactive")
 
-    # Validate applicant belongs to this tenant
     ap_result = await db.execute(
         select(Applicant).where(Applicant.id == data.applicant_id, Applicant.tenant_id == tenant_id)
     )
@@ -92,7 +122,6 @@ async def create_instance(
         db.add(step_instance)
         await db.flush()
 
-        # Auto-draft email for the first step if it's an email type
         if is_first and step.step_type == StepType.email and settings_groq_enabled():
             try:
                 draft = await groq_service.draft_verification_email(
@@ -102,7 +131,25 @@ async def create_instance(
                 )
                 step_instance.email_draft = draft
             except Exception:
-                pass  # Non-blocking: email draft is a convenience feature
+                pass
+
+    await audit_service.log(
+        db=db,
+        action=AuditAction.instance_created,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        entity_type="workflow_instance",
+        entity_id=instance.id,
+        metadata={"workflow_id": str(workflow.id), "applicant_id": str(applicant.id)},
+    )
+
+    await notification_service.create_notification(
+        db=db,
+        tenant_id=tenant_id,
+        message=f"Background check started for {applicant_name} using workflow '{workflow.name}'",
+        entity_type="workflow_instance",
+        entity_id=instance.id,
+    )
 
     await db.flush()
     instance = await _load_instance(instance.id, tenant_id, db)
@@ -114,11 +161,11 @@ async def advance_step(
     step_instance_id: uuid.UUID,
     data: StepInstanceUpdate,
     tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
     db: AsyncSession,
 ) -> WorkflowInstanceOut:
     instance = await _load_instance(instance_id, tenant_id, db)
 
-    # Find the target step instance
     step_instance = next(
         (si for si in instance.step_instances if si.id == step_instance_id), None
     )
@@ -133,7 +180,6 @@ async def advance_step(
     if data.status in (StepInstanceStatus.completed, StepInstanceStatus.skipped, StepInstanceStatus.failed):
         step_instance.completed_at = now
 
-    # Find and activate the next pending step
     pending_steps = sorted(
         [si for si in instance.step_instances if si.status == StepInstanceStatus.pending],
         key=lambda si: si.step.order,
@@ -143,7 +189,6 @@ async def advance_step(
         next_step_instance = pending_steps[0]
         next_step_instance.status = StepInstanceStatus.in_progress
 
-        # Auto-draft email if the next step is an email type
         if next_step_instance.step.step_type == StepType.email and settings_groq_enabled():
             ap_result = await db.execute(
                 select(Applicant).where(Applicant.id == instance.applicant_id)
@@ -160,13 +205,45 @@ async def advance_step(
                 except Exception:
                     pass
     else:
-        # All steps done — mark instance complete
         all_statuses = {si.status for si in instance.step_instances}
         if StepInstanceStatus.failed in all_statuses:
             instance.status = InstanceStatus.failed
         else:
             instance.status = InstanceStatus.completed
         instance.completed_at = now
+
+        ap_result = await db.execute(select(Applicant).where(Applicant.id == instance.applicant_id))
+        applicant = ap_result.scalar_one_or_none()
+        applicant_name = f"{applicant.first_name} {applicant.last_name}" if applicant else "applicant"
+
+        final_status = "completed" if instance.status == InstanceStatus.completed else "failed"
+        await notification_service.create_notification(
+            db=db,
+            tenant_id=tenant_id,
+            message=f"Background check {final_status} for {applicant_name}",
+            entity_type="workflow_instance",
+            entity_id=instance.id,
+        )
+
+        await audit_service.log(
+            db=db,
+            action=AuditAction.instance_completed,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            entity_type="workflow_instance",
+            entity_id=instance.id,
+            metadata={"status": final_status},
+        )
+
+    await audit_service.log(
+        db=db,
+        action=AuditAction.step_advanced,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        entity_type="workflow_step_instance",
+        entity_id=step_instance_id,
+        metadata={"new_status": data.status},
+    )
 
     await db.flush()
     instance = await _load_instance(instance_id, tenant_id, db)

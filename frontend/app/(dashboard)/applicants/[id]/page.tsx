@@ -25,10 +25,10 @@ export default function ApplicantDetailPage() {
     async function load() {
       const [app, insts] = await Promise.all([
         api.applicants.get(id),
-        api.instances.list(),
+        api.instances.list({ applicant_id: id, per_page: 50 }),
       ])
       setApplicant(app)
-      setInstances(insts.filter((i) => i.applicant_id === id))
+      setInstances(insts.items)
       setLoading(false)
     }
     load()

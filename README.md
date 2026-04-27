@@ -1,143 +1,73 @@
-# CheckFlow
-
-A multi-tenant background check workflow SaaS. Admins define reusable workflows with typed steps; clerks run those workflows against applicants and track step-by-step progress. Email steps get AI-drafted verification emails via Groq.
+### CheckFlow — Background Check SaaS Demo
 
 ---
 
-## Stack
+## 🚀 Quick Start (2-Minute Demo)
 
-| Layer | Tech |
-|---|---|
-| Backend | FastAPI + PostgreSQL + SQLAlchemy (async) + Alembic + JWT |
-| AI | Groq (`llama3-8b-8192`) |
-| Frontend | Next.js 14 (App Router) + Tailwind + shadcn/ui + Zustand |
+### 🐳 Option A: Docker (Easiest)
+Run the entire stack with a single command. This handles the Database, Backend (migrations/seed), and Frontend automatically.
 
----
-
-## Project Structure
-
+```bash
+docker-compose up --build
 ```
-checkflow/
-├── backend/
-│   ├── app/
-│   │   ├── api/v1/          # Route handlers (thin — delegate to services)
-│   │   ├── core/            # Config, DB engine, JWT security
-│   │   ├── models/          # SQLAlchemy ORM models
-│   │   ├── schemas/         # Pydantic request/response schemas
-│   │   └── services/        # All business logic
-│   ├── alembic/             # DB migrations
-│   ├── requirements.txt
-│   └── .env.example
-└── frontend/
-    ├── app/                 # Next.js App Router pages
-    ├── components/          # Reusable UI components
-    ├── lib/                 # API client, auth helpers
-    ├── store/               # Zustand state
-    └── types/               # Shared TypeScript types
-```
+*App will be at `http://localhost:3000`, API at `http://localhost:8000`*
 
 ---
 
-## Backend Setup
+### 💻 Option B: Manual Setup
+If you prefer running without Docker.
 
-### 1. Prerequisites
-
-- Python 3.11+
-- PostgreSQL 15+
-
-### 2. Install dependencies
-
+#### 1. Backend Setup
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate      # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # (Windows: .venv\Scripts\activate)
 pip install -r requirements.txt
-```
 
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env — set DATABASE_URL, SECRET_KEY, GROQ_API_KEY
-```
-
-### 4. Create the database
-
-```bash
-createdb checkflow
-```
-
-### 5. Run migrations
-
-```bash
-# Generate the initial migration (first time only)
-alembic revision --autogenerate -m "initial"
-
-# Apply migrations
+cp .env.example .env       # (Edit .env with your DATABASE_URL / GROQ_API_KEY)
 alembic upgrade head
+python -m scripts.seed     # Populates demo users, workflows, and applicants
+uvicorn app.main:app --reload
 ```
 
-### 6. Start the API server
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-API docs available at: `http://localhost:8000/docs`
-
----
-
-## Frontend Setup
-
-### 1. Prerequisites
-
-- Node.js 18+
-
-### 2. Install dependencies
-
+### 2. Frontend Setup
 ```bash
 cd frontend
+cp .env.example .env.local  # NEXT_PUBLIC_API_URL=http://localhost:8000
 npm install
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env.local
-# Set NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 4. Start the dev server
-
-```bash
 npm run dev
 ```
 
-App available at: `http://localhost:3000`
+### 🔐 Demo Credentials
+
+| Role | Email | Password |
+|---|---|---|
+| **Superadmin** | `super@veriqo.com` | `Admin123` |
+| **Admin** | `admin@acme.com` | `Admin123` |
+| **Clerk** | `clerk@acme.com` | `Admin123` |
+
+*Superadmin login is at `/superadmin/login`*
 
 ---
 
-## Key Concepts
+## Technical Stack
 
-### Multi-tenancy
-Every DB query is scoped by `tenant_id` extracted from the JWT. No cross-tenant data leakage is possible at the service layer.
-
-### Roles
-| Role | Permissions |
+| Layer | Technology |
 |---|---|
-| `admin` | Full access — manage users, create/delete workflows |
-| `clerk` | Read workflows, manage applicants, run and advance instances |
+| **Backend** | FastAPI, PostgreSQL, SQLAlchemy (async), Alembic, JWT |
+| **Frontend** | Next.js 14 (App Router), Tailwind CSS, shadcn/ui, Zustand |
+| **AI** | Groq (`llama3-8b-8192`) for verification email drafting |
 
-### Workflow Lifecycle
-1. Admin creates a **Workflow** with ordered **Steps** (types: `email`, `document`, `manual`, `identity`)
-2. Clerk starts a **WorkflowInstance** for an applicant → step instances are auto-created
-3. The first step is set to `in_progress` immediately
-4. If the first step is type `email`, Groq auto-drafts the verification email
-5. Clerk advances each step (`completed` / `skipped` / `failed`) → next step activates
-6. Instance auto-completes when all steps are resolved
+---
 
-### Groq AI
-Set `GROQ_API_KEY` in `.env`. On any `email`-type step becoming active, the service calls Groq to generate a professional verification email draft. The draft is stored on the step instance and editable before sending. If the key is absent, email drafting is silently skipped.
+## Core Features
+
+- **Multi-tenancy:** Full tenant isolation via `tenant_id` scoping in services.
+- **Dynamic Workflows:** Admins create custom onboarding paths with ordered steps.
+- **Workflow Instances:** Clerks track applicant progress through real-time states.
+- **AI-Assisted Emails:** Automatic drafting of professional verification requests via Groq.
+- **Audit Logging:** Every state change is tracked for compliance.
+- **Analytics Dashboard:** High-level metrics for tenant performance.
 
 ---
 

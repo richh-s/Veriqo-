@@ -25,8 +25,7 @@ async def create_workflow(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin-only: create a new workflow template with steps."""
-    return await workflow_service.create_workflow(data, current_user.tenant_id, db)
+    return await workflow_service.create_workflow(data, current_user.tenant_id, current_user.id, db)
 
 
 @router.get("/{workflow_id}", response_model=WorkflowOut)
@@ -45,8 +44,7 @@ async def update_workflow(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin-only: update workflow metadata."""
-    return await workflow_service.update_workflow(workflow_id, data, current_user.tenant_id, db)
+    return await workflow_service.update_workflow(workflow_id, data, current_user.tenant_id, current_user.id, db)
 
 
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -55,5 +53,4 @@ async def delete_workflow(
     current_user: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin-only: delete a workflow and its steps."""
-    await workflow_service.delete_workflow(workflow_id, current_user.tenant_id, db)
+    await workflow_service.delete_workflow(workflow_id, current_user.tenant_id, current_user.id, db)

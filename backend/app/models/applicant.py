@@ -32,6 +32,7 @@ class Applicant(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="applicants")
     workflow_instances: Mapped[list["WorkflowInstance"]] = relationship(
