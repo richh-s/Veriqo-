@@ -110,10 +110,9 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-gray-500">Don't have an account?</span>{' '}
-            <Link href="/register" className="font-semibold text-blue-600 hover:text-blue-700 transition-colors">
-              Create an account
+          <div className="mt-6 text-center">
+            <Link href="/superadmin/login" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              Admin login
             </Link>
           </div>
         </CardContent>
