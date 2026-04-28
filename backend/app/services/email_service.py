@@ -28,10 +28,11 @@ async def send_workflow_email(to_email: str, to_name: str, subject: str, body: s
         return False
 
 
-async def send_welcome_email(email: str, full_name: str, temp_password: str, company_name: str) -> None:
+async def send_welcome_email(email: str, full_name: str, temp_password: str, company_name: str) -> tuple[bool, str]:
+    """Returns (success, error_message)."""
     if not settings.RESEND_API_KEY:
         print(f"MOCK WELCOME EMAIL to {email}: company={company_name}, password={temp_password}")
-        return
+        return True, ""
 
     params = {
         "from": "Veriqo <onboarding@resend.dev>",
@@ -55,8 +56,11 @@ async def send_welcome_email(email: str, full_name: str, temp_password: str, com
     }
     try:
         resend.Emails.send(params)
+        return True, ""
     except Exception as e:
-        print(f"Failed to send welcome email via Resend: {e}")
+        msg = str(e)
+        print(f"Failed to send welcome email via Resend: {msg}")
+        return False, msg
 
 
 async def send_deactivation_email(email: str, full_name: str) -> None:

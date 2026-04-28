@@ -41,6 +41,8 @@ class CreateTenantResponse(BaseModel):
     tenant: TenantSummary
     admin_email: str
     temp_password: str
+    email_sent: bool
+    email_error: str = ""
 
 
 class UpdateTenantRequest(BaseModel):

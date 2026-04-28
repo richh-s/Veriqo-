@@ -157,6 +157,8 @@ export interface CreateTenantResponse {
   tenant: TenantSummary
   admin_email: string
   temp_password: string
+  email_sent: boolean
+  email_error: string
 }
 
 export interface TenantSummary {

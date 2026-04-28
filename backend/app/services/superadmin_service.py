@@ -78,7 +78,7 @@ async def create_tenant(data: CreateTenantRequest, db: AsyncSession) -> CreateTe
     db.add(admin)
     await db.flush()
 
-    await email_service.send_welcome_email(
+    email_sent, email_error = await email_service.send_welcome_email(
         email=data.admin_email,
         full_name=data.admin_full_name,
         temp_password=temp_password,
@@ -106,6 +106,8 @@ async def create_tenant(data: CreateTenantRequest, db: AsyncSession) -> CreateTe
         ),
         admin_email=data.admin_email,
         temp_password=temp_password,
+        email_sent=email_sent,
+        email_error=email_error,
     )
 
 

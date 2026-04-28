@@ -26,7 +26,7 @@ export default function SuperAdminTenantsPage() {
   const [createError, setCreateError] = useState('')
   const [conflictTenant, setConflictTenant] = useState<string | null>(null)
   const [form, setForm] = useState({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' })
-  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string; company: string } | null>(null)
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string; company: string; emailSent: boolean; emailError: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
   // edit form
@@ -95,7 +95,7 @@ const load = useCallback(async () => {
       const res = await api.superadmin.createTenant({ ...form, admin_password: form.admin_password || undefined })
       setResult((prev) => prev ? { ...prev, items: [res.tenant, ...prev.items], total: prev.total + 1 } : prev)
       setCreateOpen(false)
-      setCreatedCreds({ email: res.admin_email, password: res.temp_password, company: res.tenant.name })
+      setCreatedCreds({ email: res.admin_email, password: res.temp_password, company: res.tenant.name, emailSent: res.email_sent, emailError: res.email_error })
       setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create tenant'
@@ -246,13 +246,23 @@ const load = useCallback(async () => {
       )}
 
       {createdCreds && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-4">
+        <div className={`rounded-lg border px-5 py-4 ${createdCreds.emailSent ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-green-800 mb-2">"{createdCreds.company}" created — save these credentials</p>
-              <div className="space-y-1 font-mono text-sm text-green-900 bg-white border border-green-200 rounded-md px-4 py-3">
-                <p><span className="text-green-600">Email:</span> {createdCreds.email}</p>
-                <p><span className="text-green-600">Password:</span> {createdCreds.password}</p>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold mb-1 ${createdCreds.emailSent ? 'text-green-800' : 'text-amber-800'}`}>
+                "{createdCreds.company}" created
+                {createdCreds.emailSent ? ' — credentials emailed ✓' : ' — email not sent, share credentials manually'}
+              </p>
+              {!createdCreds.emailSent && (
+                <p className="text-xs text-amber-700 mb-2">
+                  {createdCreds.emailError.includes('verify a domain')
+                    ? 'Resend requires a verified custom domain to send to external addresses. Go to resend.com/domains to set one up.'
+                    : createdCreds.emailError}
+                </p>
+              )}
+              <div className="space-y-1 font-mono text-sm bg-white border border-gray-200 rounded-md px-4 py-3">
+                <p><span className="text-gray-500">Email:</span> {createdCreds.email}</p>
+                <p><span className="text-gray-500">Password:</span> {createdCreds.password}</p>
               </div>
               <button
                 onClick={() => {
@@ -260,12 +270,12 @@ const load = useCallback(async () => {
                   setCopied(true)
                   setTimeout(() => setCopied(false), 2000)
                 }}
-                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-900"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
               >
                 {copied ? <><CheckCheck className="h-3.5 w-3.5" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy credentials</>}
               </button>
             </div>
-            <button onClick={() => setCreatedCreds(null)} className="text-green-400 hover:text-green-600 shrink-0">
+            <button onClick={() => setCreatedCreds(null)} className="text-gray-400 hover:text-gray-600 shrink-0">
               <X className="h-4 w-4" />
             </button>
           </div>
