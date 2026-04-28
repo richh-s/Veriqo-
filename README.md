@@ -59,32 +59,34 @@ npm run dev
 ```mermaid
 graph TB
     subgraph Browser["Browser"]
-        FE["Next.js 14\nApp Router"]
+        FE["Next.js 14\nApp Router + Zustand"]
     end
 
-    subgraph Backend["Backend (FastAPI)"]
-        API["REST API\n/api/v1/*"]
-        AUTH["Auth\nJWT + Refresh"]
-        SVC["Services\nBusiness Logic"]
-        ALEMBIC["Alembic\nMigrations"]
-    end
-
-    subgraph Storage["Storage"]
-        PG[("PostgreSQL\n./pgdata")]
+    subgraph Docker["Docker Compose"]
+        subgraph Backend["backend"]
+            API["FastAPI\nREST API"]
+            SVC["Services"]
+            JWT["JWT Auth\naccess + refresh\n(stateless)"]
+        end
+        subgraph Frontend["frontend"]
+            FE
+        end
+        subgraph DB["db"]
+            PG[("PostgreSQL 15\n./pgdata bind mount")]
+        end
     end
 
     subgraph External["External Services"]
-        GROQ["Groq API\nllama-3.1-8b-instant\nEmail Drafting"]
-        RESEND["Resend\nTransactional Email"]
+        GROQ["Groq\nllama-3.1-8b-instant\nAI email drafting"]
+        RESEND["Resend\nWelcome / invite /\ndeactivation emails"]
     end
 
-    FE -->|"HTTP + Bearer JWT"| API
-    API --> AUTH
-    AUTH --> SVC
-    SVC --> PG
-    ALEMBIC --> PG
-    SVC -->|"AI draft generation"| GROQ
-    SVC -->|"Welcome / invite /\ndeactivation emails"| RESEND
+    FE -->|"Bearer JWT"| API
+    API --> JWT
+    JWT --> SVC
+    SVC <-->|"SQLAlchemy async"| PG
+    SVC -->|"draft generation"| GROQ
+    SVC -->|"transactional email"| RESEND
 ```
 
 ### Data Model
@@ -92,115 +94,221 @@ graph TB
 ```mermaid
 erDiagram
     SUPERADMIN {
-        uuid id
+        uuid id PK
         string email
         string hashed_password
+        string full_name
+        bool is_active
+        datetime created_at
     }
 
     TENANT {
-        uuid id
+        uuid id PK
         string name
         string slug
         bool is_active
+        datetime created_at
     }
 
     USER {
-        uuid id
-        uuid tenant_id
+        uuid id PK
+        uuid tenant_id FK
         string email
+        string full_name
+        string hashed_password
         string role
         bool is_active
+        datetime created_at
     }
 
     APPLICANT {
-        uuid id
-        uuid tenant_id
+        uuid id PK
+        uuid tenant_id FK
         string first_name
         string last_name
+        string email
+        string phone
+        string address
         string status
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
     }
 
     WORKFLOW {
-        uuid id
-        uuid tenant_id
+        uuid id PK
+        uuid tenant_id FK
         string name
+        string description
         bool is_active
+        datetime created_at
+        datetime updated_at
     }
 
     WORKFLOW_STEP {
-        uuid id
-        uuid workflow_id
+        uuid id PK
+        uuid workflow_id FK
         string name
         string step_type
         int order
+        json config
+        datetime created_at
     }
 
     WORKFLOW_INSTANCE {
-        uuid id
-        uuid tenant_id
-        uuid workflow_id
-        uuid applicant_id
+        uuid id PK
+        uuid tenant_id FK
+        uuid workflow_id FK
+        uuid applicant_id FK
         string status
+        datetime started_at
+        datetime completed_at
+        datetime created_at
     }
 
     WORKFLOW_STEP_INSTANCE {
-        uuid id
-        uuid instance_id
-        uuid step_id
+        uuid id PK
+        uuid instance_id FK
+        uuid step_id FK
         string status
-        string email_draft
+        text notes
+        text email_draft
+        datetime completed_at
+        datetime created_at
+    }
+
+    NOTIFICATION {
+        uuid id PK
+        uuid tenant_id FK
+        uuid user_id FK
+        text message
+        string entity_type
+        uuid entity_id
+        bool is_read
+        datetime created_at
+    }
+
+    COMMUNICATION_LOG {
+        uuid id PK
+        uuid tenant_id FK
+        uuid instance_id FK
+        uuid step_instance_id FK
+        uuid logged_by_id FK
+        string direction
+        string recipient_name
+        string recipient_email
+        string subject
+        text body
+        datetime created_at
     }
 
     AUDIT_LOG {
-        uuid id
-        uuid tenant_id
+        uuid id PK
+        uuid tenant_id FK
+        uuid user_id FK
         string action
+        string entity_type
+        uuid entity_id
         json metadata
+        datetime created_at
     }
 
     TENANT ||--o{ USER : "has"
     TENANT ||--o{ APPLICANT : "has"
     TENANT ||--o{ WORKFLOW : "has"
-    WORKFLOW ||--o{ WORKFLOW_STEP : "has"
-    WORKFLOW_INSTANCE }o--|| WORKFLOW : "runs"
-    WORKFLOW_INSTANCE }o--|| APPLICANT : "tracks"
-    WORKFLOW_INSTANCE ||--o{ WORKFLOW_STEP_INSTANCE : "has"
-    WORKFLOW_STEP_INSTANCE }o--|| WORKFLOW_STEP : "mirrors"
-    TENANT ||--o{ AUDIT_LOG : "logs"
+    TENANT ||--o{ WORKFLOW_INSTANCE : "scopes"
+    TENANT ||--o{ NOTIFICATION : "receives"
+    TENANT ||--o{ COMMUNICATION_LOG : "logs"
+    TENANT ||--o{ AUDIT_LOG : "audits"
+    WORKFLOW ||--o{ WORKFLOW_STEP : "defines"
+    WORKFLOW ||--o{ WORKFLOW_INSTANCE : "runs as"
+    APPLICANT ||--o{ WORKFLOW_INSTANCE : "subject of"
+    WORKFLOW_INSTANCE ||--o{ WORKFLOW_STEP_INSTANCE : "tracks"
+    WORKFLOW_INSTANCE ||--o{ COMMUNICATION_LOG : "records"
+    WORKFLOW_STEP ||--o{ WORKFLOW_STEP_INSTANCE : "mirrors"
+    WORKFLOW_STEP_INSTANCE ||--o| COMMUNICATION_LOG : "linked to"
+    USER ||--o{ COMMUNICATION_LOG : "logged by"
+    USER ||--o{ NOTIFICATION : "notified"
 ```
 
-### Request Flow
+### Key Flows
 
+**Authentication**
+```mermaid
+sequenceDiagram
+    actor A as Admin
+    participant FE as Frontend
+    participant API as FastAPI
+    participant DB as PostgreSQL
+
+    A->>FE: Enter credentials
+    FE->>API: POST /auth/login
+    API->>DB: Verify user + tenant active check
+    API->>DB: Write audit log (user_logged_in)
+    API-->>FE: access_token (15m) + refresh_token (7d)
+    Note over FE: Zustand persist stores tokens
+
+    A->>FE: Token expires
+    FE->>API: POST /auth/refresh {refresh_token}
+    API-->>FE: New access_token
+```
+
+**Tenant Creation (Superadmin)**
 ```mermaid
 sequenceDiagram
     actor SA as Superadmin
-    actor A as Admin
     participant FE as Frontend
     participant API as FastAPI
     participant DB as PostgreSQL
     participant Email as Resend
 
-    SA->>FE: Create tenant
+    SA->>FE: Fill create tenant form
     FE->>API: POST /superadmin/tenants
-    API->>DB: Insert tenant + admin user
-    API->>Email: Send welcome email (credentials)
-    API-->>FE: tenant + temp_password + email_sent
+    API->>DB: Check email + slug uniqueness
+    API->>DB: Insert tenant
+    API->>DB: Insert admin user (hashed password)
+    API->>Email: send_welcome_email (credentials)
+    API->>DB: Write audit log (tenant_created)
+    API-->>FE: tenant + admin_email + temp_password + email_sent
+    Note over FE: Always shows credentials in UI\nregardless of email delivery
+```
 
-    A->>FE: Login
-    FE->>API: POST /auth/login
-    API->>DB: Verify credentials
-    API-->>FE: access_token + refresh_token
+**Running a Background Check**
+```mermaid
+sequenceDiagram
+    actor A as Admin
+    participant FE as Frontend
+    participant API as FastAPI
+    participant DB as PostgreSQL
+    participant GROQ as Groq AI
 
-    A->>FE: Start background check
+    A->>FE: Select applicant + workflow
     FE->>API: POST /instances
-    API->>DB: Create instance + step instances
-    API-->>FE: WorkflowInstance
+    API->>DB: Check no active duplicate instance
+    API->>DB: Create WorkflowInstance (in_progress)
+    API->>DB: Create WorkflowStepInstances (first=in_progress, rest=pending)
+    alt First step is email type
+        API->>GROQ: Generate consent email draft
+        API->>DB: Save draft to step instance
+    end
+    API->>DB: Create notification + audit log
+    API-->>FE: WorkflowInstance with step instances
 
-    A->>FE: Advance email step
-    FE->>API: POST /instances/:id/steps/:sid/draft-email
-    API->>DB: Fetch applicant + workflow context
-    API->>Groq: Generate email draft
-    API-->>FE: email_draft text
+    A->>FE: Edit draft + click Send
+    FE->>API: PATCH /instances/:id/steps/:sid/email-draft
+    API->>DB: Save edited draft
+    FE->>API: PATCH /instances/:id/steps/:sid {status: completed}
+    API->>DB: Mark step completed, advance next step to in_progress
+    alt Next step is email type
+        API->>GROQ: Auto-generate draft for next step
+        API->>DB: Save new draft
+    end
+    API->>DB: Log to CommunicationLog
+    API->>DB: Create notification + audit log
+    alt All steps completed
+        API->>DB: Mark instance completed
+    end
+    API-->>FE: Updated WorkflowInstance
 ```
 
 ### Two-tier access model
