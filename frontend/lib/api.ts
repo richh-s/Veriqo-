@@ -133,6 +133,12 @@ export const api = {
     listUsers: () => request<User[]>('/api/v1/auth/users'),
     updateUser: (id: string, data: { is_active: boolean }) =>
       request<User>(`/api/v1/auth/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    resetUserPassword: (id: string) =>
+      request<{ email: string; temp_password: string; email_sent: boolean; email_error: string }>(
+        `/api/v1/auth/users/${id}/reset-password`, { method: 'POST' }
+      ),
+    changePassword: (data: { current_password: string; new_password: string }) =>
+      request<void>('/api/v1/auth/me/change-password', { method: 'POST', body: JSON.stringify(data) }),
     invite: (data: InviteUserRequest) =>
       request<User>('/api/v1/auth/invite', {
         method: 'POST', body: JSON.stringify(data),

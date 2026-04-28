@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.audit_log import AuditAction
-from app.schemas.auth import RegisterRequest, LoginRequest, InviteUserRequest, RefreshRequest, TokenResponse, UserOut, UserUpdateRequest
+from app.schemas.auth import RegisterRequest, LoginRequest, InviteUserRequest, RefreshRequest, TokenResponse, UserOut, UserUpdateRequest, ResetPasswordResponse, ChangePasswordRequest
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.services import audit_service, email_service
 import uuid
@@ -107,6 +107,55 @@ async def update_user(user_id: uuid.UUID, tenant_id: uuid.UUID, data: UserUpdate
     if was_active and not data.is_active:
         await email_service.send_deactivation_email(email=user.email, full_name=user.full_name)
     return UserOut.model_validate(user)
+
+
+async def reset_user_password(
+    user_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: AsyncSession,
+) -> ResetPasswordResponse:
+    result = await db.execute(select(User).where(User.id == user_id, User.tenant_id == tenant_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    import secrets, string
+    chars = string.ascii_letters + string.digits
+    while True:
+        temp_password = ''.join(secrets.choice(chars) for _ in range(12))
+        if any(c.isupper() for c in temp_password) and any(c.isdigit() for c in temp_password):
+            break
+
+    user.hashed_password = hash_password(temp_password)
+    await db.flush()
+
+    email_sent, email_error = await email_service.send_password_reset_email(
+        email=user.email,
+        full_name=user.full_name,
+        temp_password=temp_password,
+    )
+
+    return ResetPasswordResponse(
+        email=user.email,
+        temp_password=temp_password,
+        email_sent=email_sent,
+        email_error=email_error,
+    )
+
+
+async def change_own_password(
+    user_id: uuid.UUID,
+    data: ChangePasswordRequest,
+    db: AsyncSession,
+) -> None:
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(data.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    user.hashed_password = hash_password(data.new_password)
+    await db.flush()
 
 
 async def list_users(tenant_id: uuid.UUID, db: AsyncSession) -> list[UserOut]:

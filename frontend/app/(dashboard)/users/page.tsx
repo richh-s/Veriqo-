@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, UserPlus, Shield, User as UserIcon, PowerOff, Power } from 'lucide-react'
+import { Users, UserPlus, Shield, User as UserIcon, PowerOff, Power, KeyRound, Copy, CheckCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,6 +25,9 @@ export default function TeamPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [toggling, setToggling] = useState<string | null>(null)
+  const [resetting, setResetting] = useState<string | null>(null)
+  const [resetResult, setResetResult] = useState<{ email: string; temp_password: string; email_sent: boolean; email_error: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => { loadUsers() }, [])
 
@@ -55,6 +58,19 @@ export default function TeamPage() {
     }
   }
 
+  async function handleResetPassword(user: UserOut) {
+    if (!confirm(`Reset password for ${user.full_name}? They will receive a new temporary password.`)) return
+    setResetting(user.id)
+    try {
+      const result = await api.auth.resetUserPassword(user.id)
+      setResetResult(result)
+    } catch (err: any) {
+      setError(err.message || 'Password reset failed')
+    } finally {
+      setResetting(null)
+    }
+  }
+
   async function handleToggleActive(user: UserOut) {
     setToggling(user.id)
     try {
@@ -77,6 +93,36 @@ export default function TeamPage() {
           Add Member
         </Button>
       </div>
+
+      {resetResult && (
+        <div className={`rounded-lg border px-5 py-4 ${resetResult.email_sent ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <p className={`text-sm font-semibold mb-1 ${resetResult.email_sent ? 'text-green-800' : 'text-amber-800'}`}>
+                Password reset — {resetResult.email_sent ? 'new credentials emailed ✓' : 'email not sent, share manually'}
+              </p>
+              {!resetResult.email_sent && resetResult.email_error && (
+                <p className="text-xs text-amber-700 mb-2">{resetResult.email_error.includes('verify a domain') ? 'Resend requires a verified domain to send to external addresses.' : resetResult.email_error}</p>
+              )}
+              <div className="font-mono text-sm bg-white border border-gray-200 rounded-md px-4 py-3 space-y-1">
+                <p><span className="text-gray-500">Email:</span> {resetResult.email}</p>
+                <p><span className="text-gray-500">Password:</span> {resetResult.temp_password}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`Email: ${resetResult.email}\nPassword: ${resetResult.temp_password}`)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+              >
+                {copied ? <><CheckCheck className="h-3.5 w-3.5" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy credentials</>}
+              </button>
+            </div>
+            <button onClick={() => setResetResult(null)} className="text-gray-400 hover:text-gray-600 shrink-0 text-lg leading-none">×</button>
+          </div>
+        </div>
+      )}
 
       {showInvite && (
         <Card className="border-blue-100 shadow-lg shadow-blue-50 animate-in fade-in zoom-in duration-200">
@@ -190,25 +236,35 @@ export default function TeamPage() {
                     {formatDate(user.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {user.is_active ? (
+                    <div className="flex items-center justify-end gap-1.5">
                       <button
-                        onClick={() => handleToggleActive(user)}
-                        disabled={toggling === user.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                        onClick={() => handleResetPassword(user)}
+                        disabled={resetting === user.id}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
                       >
-                        <PowerOff className="h-3.5 w-3.5" />
-                        {toggling === user.id ? 'Deactivating…' : 'Deactivate'}
+                        <KeyRound className="h-3.5 w-3.5" />
+                        {resetting === user.id ? 'Resetting…' : 'Reset Password'}
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => handleToggleActive(user)}
-                        disabled={toggling === user.id}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
-                      >
-                        <Power className="h-3.5 w-3.5" />
-                        {toggling === user.id ? 'Activating…' : 'Activate'}
-                      </button>
-                    )}
+                      {user.is_active ? (
+                        <button
+                          onClick={() => handleToggleActive(user)}
+                          disabled={toggling === user.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          <PowerOff className="h-3.5 w-3.5" />
+                          {toggling === user.id ? 'Deactivating…' : 'Deactivate'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleToggleActive(user)}
+                          disabled={toggling === user.id}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                        >
+                          <Power className="h-3.5 w-3.5" />
+                          {toggling === user.id ? 'Activating…' : 'Activate'}
+                        </button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

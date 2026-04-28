@@ -97,11 +97,10 @@ async def _get_instance_trend(tenant_id: uuid.UUID, db: AsyncSession) -> list[In
     trend = []
     for i in range(30):
         day = start + timedelta(days=i)
-        day_str = day.isoformat()
         trend.append(InstanceTrend(
             date=day,
-            created=created_by_day.get(day_str, 0),
-            completed=completed_by_day.get(day_str, 0),
+            created=created_by_day.get(day, 0),
+            completed=completed_by_day.get(day, 0),
         ))
 
     return trend

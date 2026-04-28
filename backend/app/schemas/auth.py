@@ -63,6 +63,23 @@ class UserUpdateRequest(BaseModel):
     is_active: bool
 
 
+class ResetPasswordResponse(BaseModel):
+    email: str
+    temp_password: str
+    email_sent: bool
+    email_error: str = ""
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
+        return _validate_password(v)
+
+
 class InviteUserRequest(BaseModel):
     full_name: str
     email: EmailStr
