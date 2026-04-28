@@ -10,6 +10,7 @@ export type AuditAction =
   | 'workflow_created' | 'workflow_updated' | 'workflow_deleted'
   | 'instance_created' | 'step_advanced' | 'instance_completed'
   | 'communication_logged' | 'tenant_disabled' | 'tenant_enabled'
+  | 'tenant_created' | 'superadmin_login'
 
 export interface PaginatedResponse<T> {
   items: T[]
@@ -150,6 +151,12 @@ export interface AnalyticsOverview {
   stats: DashboardStats
   instance_trend: InstanceTrend[]
   step_completion_rates: StepCompletionRate[]
+}
+
+export interface CreateTenantResponse {
+  tenant: TenantSummary
+  admin_email: string
+  temp_password: string
 }
 
 export interface TenantSummary {

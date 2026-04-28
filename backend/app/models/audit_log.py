@@ -22,6 +22,8 @@ class AuditAction(str, enum.Enum):
     communication_logged = "communication_logged"
     tenant_disabled      = "tenant_disabled"
     tenant_enabled       = "tenant_enabled"
+    tenant_created       = "tenant_created"
+    superadmin_login     = "superadmin_login"
 
 
 class AuditLog(Base):

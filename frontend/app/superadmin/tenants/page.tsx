@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Building2, PowerOff, Power, PlusCircle, X } from 'lucide-react'
+import { Building2, PowerOff, Power, PlusCircle, X, Pencil, Copy, CheckCheck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -19,13 +19,23 @@ export default function SuperAdminTenantsPage() {
   const [loading, setLoading]   = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
+
+  // create form
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating]     = useState(false)
   const [createError, setCreateError] = useState('')
   const [conflictTenant, setConflictTenant] = useState<string | null>(null)
-  const [form, setForm] = useState({ company_name: '', slug: '', admin_email: '', admin_full_name: '' })
+  const [form, setForm] = useState({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' })
+  const [createdCreds, setCreatedCreds] = useState<{ email: string; password: string; company: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
-  const load = useCallback(async () => {
+  // edit form
+  const [editTenant, setEditTenant] = useState<TenantSummary | null>(null)
+  const [editForm, setEditForm]     = useState({ name: '', slug: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError]   = useState('')
+
+const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await api.superadmin.listTenants({ page, per_page: 20 })
@@ -36,6 +46,28 @@ export default function SuperAdminTenantsPage() {
   }, [page])
 
   useEffect(() => { load() }, [load])
+
+  function openEdit(tenant: TenantSummary) {
+    setEditTenant(tenant)
+    setEditForm({ name: tenant.name, slug: tenant.slug })
+    setEditError('')
+  }
+
+  async function handleEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTenant) return
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const updated = await api.superadmin.updateTenant(editTenant.id, { name: editForm.name, slug: editForm.slug })
+      setResult((prev) => prev ? { ...prev, items: prev.items.map((t) => t.id === updated.id ? updated : t) } : prev)
+      setEditTenant(null)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   async function handleToggle(tenant: TenantSummary) {
     const action = tenant.is_active ? 'disable' : 'enable'
@@ -60,10 +92,11 @@ export default function SuperAdminTenantsPage() {
     setCreateError('')
     setConflictTenant(null)
     try {
-      const tenant = await api.superadmin.createTenant(form)
-      setResult((prev) => prev ? { ...prev, items: [tenant, ...prev.items], total: prev.total + 1 } : prev)
+      const res = await api.superadmin.createTenant({ ...form, admin_password: form.admin_password || undefined })
+      setResult((prev) => prev ? { ...prev, items: [res.tenant, ...prev.items], total: prev.total + 1 } : prev)
       setCreateOpen(false)
-      setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '' })
+      setCreatedCreds({ email: res.admin_email, password: res.temp_password, company: res.tenant.name })
+      setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' })
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create tenant'
       const match = msg.match(/already registered under '(.+)'/)
@@ -85,16 +118,17 @@ export default function SuperAdminTenantsPage() {
           <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Tenants</h2>
           <p className="text-sm text-gray-500">Monitor and manage all corporate accounts on the Veriqo platform.</p>
         </div>
-        <Button onClick={() => { setCreateOpen(true); setConflictTenant(null); setCreateError('') }} className="gap-2">
+        <Button onClick={() => { setCreateOpen(true); setConflictTenant(null); setCreateError(''); setCreatedCreds(null) }} className="gap-2">
           <PlusCircle className="h-4 w-4" /> Create Tenant
         </Button>
       </div>
 
+      {/* Create form */}
       {createOpen && (
         <Card className="p-6">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-base font-semibold text-gray-900">New Tenant</h3>
-            <button onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError('') }} className="text-gray-400 hover:text-gray-600">
+            <button onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError(''); setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' }) }} className="text-gray-400 hover:text-gray-600">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -137,8 +171,17 @@ export default function SuperAdminTenantsPage() {
                   required
                 />
               </div>
+              <div className="space-y-1.5 md:col-span-2">
+                <Label>Password <span className="text-gray-400 font-normal">(leave blank to auto-generate)</span></Label>
+                <Input
+                  type="password"
+                  placeholder="Min 8 chars, 1 uppercase, 1 number"
+                  value={form.admin_password}
+                  onChange={(e) => setForm({ ...form, admin_password: e.target.value })}
+                />
+              </div>
             </div>
-            <p className="text-xs text-gray-500">A temporary password will be auto-generated and emailed to the admin.</p>
+            <p className="text-xs text-gray-500">Credentials will be shown after creation and emailed to the admin.</p>
             {createError && (
               <div className="text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
                 <p className="text-red-600">{createError}</p>
@@ -157,23 +200,82 @@ export default function SuperAdminTenantsPage() {
               </div>
             )}
             <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError('') }}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError(''); setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '', admin_password: '' }) }}>Cancel</Button>
               <Button type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create Tenant'}</Button>
             </div>
           </form>
         </Card>
       )}
 
+      {/* Edit modal */}
+      {editTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <Card className="w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-base font-semibold text-gray-900">Edit Tenant</h3>
+              <button onClick={() => setEditTenant(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleEdit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Company Name</Label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Slug</Label>
+                <Input
+                  value={editForm.slug}
+                  onChange={(e) => setEditForm({ ...editForm, slug: e.target.value })}
+                  required
+                />
+                <p className="text-xs text-gray-400">Changing the slug will affect how users access this tenant.</p>
+              </div>
+              {editError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{editError}</p>}
+              <div className="flex justify-end gap-3 pt-1">
+                <Button type="button" variant="outline" onClick={() => setEditTenant(null)}>Cancel</Button>
+                <Button type="submit" disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {createdCreds && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-green-800 mb-2">"{createdCreds.company}" created — save these credentials</p>
+              <div className="space-y-1 font-mono text-sm text-green-900 bg-white border border-green-200 rounded-md px-4 py-3">
+                <p><span className="text-green-600">Email:</span> {createdCreds.email}</p>
+                <p><span className="text-green-600">Password:</span> {createdCreds.password}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`Email: ${createdCreds.email}\nPassword: ${createdCreds.password}`)
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 2000)
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-green-700 hover:text-green-900"
+              >
+                {copied ? <><CheckCheck className="h-3.5 w-3.5" /> Copied!</> : <><Copy className="h-3.5 w-3.5" /> Copy credentials</>}
+              </button>
+            </div>
+            <button onClick={() => setCreatedCreds(null)} className="text-green-400 hover:text-green-600 shrink-0">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-sm text-red-700 font-medium">{error}</p>
-          <button
-            onClick={() => setError(null)}
-            className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0" aria-label="Dismiss">×</button>
         </div>
       )}
 
@@ -196,12 +298,12 @@ export default function SuperAdminTenantsPage() {
             <Table>
               <TableHeader className="bg-gray-50/50">
                 <TableRow className="hover:bg-transparent border-gray-100">
-                  <TableHead className="w-[300px] py-4">Organization</TableHead>
+                  <TableHead className="w-[280px] py-4">Organization</TableHead>
                   <TableHead className="py-4">Access Slug</TableHead>
                   <TableHead className="py-4">Usage Stats</TableHead>
                   <TableHead className="py-4">Registration</TableHead>
                   <TableHead className="py-4">Status</TableHead>
-                  <TableHead className="py-4 text-right pr-8">Actions</TableHead>
+                  <TableHead className="py-4 text-right pr-6">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -214,7 +316,7 @@ export default function SuperAdminTenantsPage() {
                         </div>
                         <div className="flex flex-col">
                           <span className="font-semibold text-gray-900 leading-none mb-1">{tenant.name}</span>
-                          <span className="text-xs text-gray-400 font-medium">Internal ID: {tenant.id.slice(0, 8)}...</span>
+                          <span className="text-xs text-gray-400 font-medium">ID: {tenant.id.slice(0, 8)}…</span>
                         </div>
                       </div>
                     </TableCell>
@@ -240,33 +342,39 @@ export default function SuperAdminTenantsPage() {
                       <span className="text-xs font-medium text-gray-500">{formatDate(tenant.created_at)}</span>
                     </TableCell>
                     <TableCell>
-                      <Badge 
-                        className={tenant.is_active
-                          ? 'bg-green-50 text-green-700 border-green-200'
-                          : 'bg-red-50 text-red-700 border-red-200'
-                        }
-                      >
+                      <Badge className={tenant.is_active ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}>
                         <span className={cn("h-1.5 w-1.5 rounded-full mr-1.5", tenant.is_active ? "bg-green-600" : "bg-red-600")} />
                         {tenant.is_active ? 'Active' : 'Restricted'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right pr-8">
-                      <button
-                        onClick={() => handleToggle(tenant)}
-                        disabled={toggling === tenant.id}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
-                          tenant.is_active
-                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-                            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                        )}
-                      >
-                        {tenant.is_active ? (
-                          <><PowerOff className="h-3.5 w-3.5" />{toggling === tenant.id ? 'Deactivating…' : 'Deactivate'}</>
-                        ) : (
-                          <><Power className="h-3.5 w-3.5" />{toggling === tenant.id ? 'Activating…' : 'Activate'}</>
-                        )}
-                      </button>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Edit */}
+                        <button
+                          onClick={() => openEdit(tenant)}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit
+                        </button>
+
+                        {/* Activate / Deactivate */}
+                        <button
+                          onClick={() => handleToggle(tenant)}
+                          disabled={toggling === tenant.id}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                            tenant.is_active
+                              ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                              : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                          )}
+                        >
+                          {tenant.is_active
+                            ? <><PowerOff className="h-3 w-3" />{toggling === tenant.id ? 'Deactivating…' : 'Deactivate'}</>
+                            : <><Power className="h-3 w-3" />{toggling === tenant.id ? 'Activating…' : 'Activate'}</>
+                          }
+                        </button>
+
+</div>
                     </TableCell>
                   </TableRow>
                 ))}

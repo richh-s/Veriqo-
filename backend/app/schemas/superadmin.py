@@ -34,3 +34,15 @@ class CreateTenantRequest(BaseModel):
     slug: str
     admin_email: EmailStr
     admin_full_name: str
+    admin_password: str | None = None
+
+
+class CreateTenantResponse(BaseModel):
+    tenant: TenantSummary
+    admin_email: str
+    temp_password: str
+
+
+class UpdateTenantRequest(BaseModel):
+    name: str | None = None
+    slug: str | None = None

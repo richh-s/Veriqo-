@@ -27,6 +27,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   communication_logged: 'Communication Logged',
   tenant_disabled:      'Tenant Disabled',
   tenant_enabled:       'Tenant Enabled',
+  tenant_created:       'Tenant Created',
+  superadmin_login:     'Superadmin Login',
 }
 
 const ACTION_COLORS: Record<string, string> = {

@@ -1,7 +1,7 @@
 import type {
   User, Applicant, Workflow, WorkflowInstance,
   Notification, AuditLog, AuditAction, CommunicationLog,
-  AnalyticsOverview, TenantSummary, PaginatedResponse,
+  AnalyticsOverview, TenantSummary, CreateTenantResponse, PaginatedResponse,
   LoginRequest, RegisterRequest, InviteUserRequest,
   ApplicantCreate, ApplicantUpdate, ApplicantStatus,
   WorkflowCreate, WorkflowUpdate,
@@ -221,8 +221,8 @@ export const api = {
       request<{ access_token: string }>('/api/v1/superadmin/login', {
         method: 'POST', body: JSON.stringify(data),
       }),
-    createTenant: (data: { company_name: string; slug: string; admin_email: string; admin_full_name: string }) =>
-      superadminRequest<TenantSummary>('/api/v1/superadmin/tenants', {
+    createTenant: (data: { company_name: string; slug: string; admin_email: string; admin_full_name: string; admin_password?: string }) =>
+      superadminRequest<CreateTenantResponse>('/api/v1/superadmin/tenants', {
         method: 'POST', body: JSON.stringify(data),
       }),
     listTenants: (params?: { page?: number; per_page?: number }) =>
@@ -233,5 +233,15 @@ export const api = {
       superadminRequest<TenantSummary>(`/api/v1/superadmin/tenants/${id}`, {
         method: 'PATCH', body: JSON.stringify({ is_active }),
       }),
+    updateTenant: (id: string, data: { name?: string; slug?: string }) =>
+      superadminRequest<TenantSummary>(`/api/v1/superadmin/tenants/${id}`, {
+        method: 'PUT', body: JSON.stringify(data),
+      }),
+    deleteTenant: (id: string) =>
+      superadminRequest<void>(`/api/v1/superadmin/tenants/${id}`, { method: 'DELETE' }),
+    listAuditLogs: (params?: { page?: number; per_page?: number }) =>
+      superadminRequest<PaginatedResponse<AuditLog>>(
+        `/api/v1/superadmin/audit-logs${buildQuery(params ?? {})}`
+      ),
   },
 }

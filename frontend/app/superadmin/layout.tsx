@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { Shield, Building2, LogOut, LayoutDashboard, Settings } from 'lucide-react'
+import { Shield, Building2, LogOut, ClipboardList } from 'lucide-react'
 import { useSuperAdminStore } from '@/store/superadmin-store'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +27,8 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
   if (pathname.includes('/login')) return <>{children}</>
 
   const navItems = [
-    { label: 'Tenants', icon: Building2, href: '/superadmin/tenants' },
+    { label: 'Tenants',   icon: Building2,     href: '/superadmin/tenants' },
+    { label: 'Audit Log', icon: ClipboardList,  href: '/superadmin/audit-logs' },
   ]
 
   return (
