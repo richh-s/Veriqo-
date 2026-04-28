@@ -8,7 +8,6 @@ from app.core.database import Base
 
 class UserRole(str, enum.Enum):
     admin = "admin"
-    clerk = "clerk"
 
 
 class User(Base):
@@ -19,7 +18,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.clerk)
+    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, create_constraint=False), default=UserRole.admin)
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

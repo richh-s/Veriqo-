@@ -20,7 +20,7 @@ export default function TeamPage() {
     email: '',
     full_name: '',
     password: '',
-    role: 'clerk' as 'admin' | 'clerk'
+    role: 'admin' as 'admin'
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -46,7 +46,7 @@ export default function TeamPage() {
     try {
       await api.auth.invite(inviteForm)
       setShowInvite(false)
-      setInviteForm({ email: '', full_name: '', password: '', role: 'clerk' })
+      setInviteForm({ email: '', full_name: '', password: '', role: 'admin' })
       loadUsers()
     } catch (err: any) {
       setError(err.message || 'Invitation failed')
@@ -110,30 +110,16 @@ export default function TeamPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="role">Role</Label>
-                  <select
-                    id="role"
-                    className="w-full h-10 px-3 rounded-md border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={inviteForm.role}
-                    onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value as any })}
-                  >
-                    <option value="clerk">Clerk (Standard Access)</option>
-                    <option value="admin">Admin (Full Control)</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Temporary Password</Label>
-                  <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="Set a password for them" 
-                    value={inviteForm.password}
-                    onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
-                    required 
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="password">Temporary Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Set a password for them"
+                  value={inviteForm.password}
+                  onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
+                  required
+                />
               </div>
 
               {error && (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Search, UserPlus, SlidersHorizontal, Download } from 'lucide-react'
+import { useAuthStore } from '@/store/auth-store'
 import { Navbar } from '@/components/shared/navbar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,7 @@ const STATUS_OPTIONS: { value: ApplicantStatus | ''; label: string }[] = [
 ]
 
 export default function ApplicantsPage() {
+  const isAdmin = useAuthStore((s) => s.isAdmin())
   const [result, setResult]     = useState<PaginatedResponse<Applicant> | null>(null)
   const [page, setPage]         = useState(1)
   const [search, setSearch]     = useState('')
@@ -140,10 +142,12 @@ export default function ApplicantsPage() {
               <Download className="h-4 w-4" />
               Export CSV
             </Button>
-            <Button onClick={() => { setEditing(undefined); setFormOpen(true) }} className="gap-2 shrink-0">
-              <UserPlus className="h-4 w-4" />
-              Add applicant
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => { setEditing(undefined); setFormOpen(true) }} className="gap-2 shrink-0">
+                <UserPlus className="h-4 w-4" />
+                Add applicant
+              </Button>
+            )}
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'clerk'
+export type UserRole = 'admin'
 export type ApplicantStatus = 'pending' | 'in_progress' | 'completed' | 'rejected'
 export type StepType = 'email' | 'document' | 'manual' | 'identity'
 export type InstanceStatus = 'pending' | 'in_progress' | 'completed' | 'failed'

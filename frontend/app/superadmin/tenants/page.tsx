@@ -1,9 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Building2, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Building2, PowerOff, Power, PlusCircle, X } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { api } from '@/lib/api'
@@ -16,6 +19,11 @@ export default function SuperAdminTenantsPage() {
   const [loading, setLoading]   = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
   const [error, setError]       = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating]     = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [conflictTenant, setConflictTenant] = useState<string | null>(null)
+  const [form, setForm] = useState({ company_name: '', slug: '', admin_email: '', admin_full_name: '' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -46,12 +54,115 @@ export default function SuperAdminTenantsPage() {
     }
   }
 
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    setCreateError('')
+    setConflictTenant(null)
+    try {
+      const tenant = await api.superadmin.createTenant(form)
+      setResult((prev) => prev ? { ...prev, items: [tenant, ...prev.items], total: prev.total + 1 } : prev)
+      setCreateOpen(false)
+      setForm({ company_name: '', slug: '', admin_email: '', admin_full_name: '' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to create tenant'
+      const match = msg.match(/already registered under '(.+)'/)
+      if (match) {
+        setConflictTenant(match[1])
+        setCreateError(`That email is already the admin of "${match[1]}". Find it in the list below and activate it instead.`)
+      } else {
+        setCreateError(msg)
+      }
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Active Tenants</h2>
-        <p className="text-sm text-gray-500">Monitor and manage all corporate accounts on the Veriqo platform.</p>
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Tenants</h2>
+          <p className="text-sm text-gray-500">Monitor and manage all corporate accounts on the Veriqo platform.</p>
+        </div>
+        <Button onClick={() => { setCreateOpen(true); setConflictTenant(null); setCreateError('') }} className="gap-2">
+          <PlusCircle className="h-4 w-4" /> Create Tenant
+        </Button>
       </div>
+
+      {createOpen && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-base font-semibold text-gray-900">New Tenant</h3>
+            <button onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError('') }} className="text-gray-400 hover:text-gray-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Company Name</Label>
+                <Input
+                  placeholder="Acme Corp"
+                  value={form.company_name}
+                  onChange={(e) => setForm({ ...form, company_name: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+$/, '') })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Slug</Label>
+                <Input
+                  placeholder="acme-corp"
+                  value={form.slug}
+                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Admin Full Name</Label>
+                <Input
+                  placeholder="Jane Smith"
+                  value={form.admin_full_name}
+                  onChange={(e) => setForm({ ...form, admin_full_name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Admin Email</Label>
+                <Input
+                  type="email"
+                  placeholder="jane@acmecorp.com"
+                  value={form.admin_email}
+                  onChange={(e) => setForm({ ...form, admin_email: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">A temporary password will be auto-generated and emailed to the admin.</p>
+            {createError && (
+              <div className="text-sm bg-red-50 border border-red-200 rounded px-3 py-2">
+                <p className="text-red-600">{createError}</p>
+                {conflictTenant && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const row = result?.items.find((t) => t.name === conflictTenant)
+                      if (row) document.getElementById(`tenant-${row.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    }}
+                    className="mt-1 text-red-700 underline font-medium"
+                  >
+                    Jump to "{conflictTenant}" ↓
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => { setCreateOpen(false); setConflictTenant(null); setCreateError('') }}>Cancel</Button>
+              <Button type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create Tenant'}</Button>
+            </div>
+          </form>
+        </Card>
+      )}
 
       {error && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
@@ -95,7 +206,7 @@ export default function SuperAdminTenantsPage() {
               </TableHeader>
               <TableBody>
                 {result.items.map((tenant) => (
-                  <TableRow key={tenant.id} className="group hover:bg-gray-50/50 transition-colors border-gray-100">
+                  <TableRow key={tenant.id} id={`tenant-${tenant.id}`} className={cn("group transition-colors border-gray-100", conflictTenant === tenant.name ? "bg-amber-50 ring-1 ring-amber-300 ring-inset" : "hover:bg-gray-50/50")}>
                     <TableCell className="py-5">
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
@@ -144,16 +255,16 @@ export default function SuperAdminTenantsPage() {
                         onClick={() => handleToggle(tenant)}
                         disabled={toggling === tenant.id}
                         className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+                          "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
                           tenant.is_active
-                            ? "text-red-500 hover:bg-red-50 active:scale-95"
-                            : "text-blue-600 hover:bg-blue-50 active:scale-95"
+                            ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                            : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
                         )}
                       >
                         {tenant.is_active ? (
-                          <><ToggleRight className="h-4 w-4" /> Suspend Access</>
+                          <><PowerOff className="h-3.5 w-3.5" />{toggling === tenant.id ? 'Deactivating…' : 'Deactivate'}</>
                         ) : (
-                          <><ToggleLeft className="h-4 w-4" /> Restore Access</>
+                          <><Power className="h-3.5 w-3.5" />{toggling === tenant.id ? 'Activating…' : 'Activate'}</>
                         )}
                       </button>
                     </TableCell>

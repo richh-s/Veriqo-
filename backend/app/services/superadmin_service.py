@@ -1,15 +1,25 @@
 import uuid
+import secrets
+import string
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from fastapi import HTTPException, status
 from app.models.superadmin import SuperAdmin
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.applicant import Applicant
 from app.models.audit_log import AuditAction
-from app.schemas.superadmin import SuperAdminLogin, SuperAdminTokenResponse, TenantSummary
-from app.core.security import verify_password, create_access_token
-from app.services import audit_service
+from app.schemas.superadmin import SuperAdminLogin, SuperAdminTokenResponse, TenantSummary, CreateTenantRequest
+from app.core.security import verify_password, create_access_token, hash_password
+from app.services import audit_service, email_service
+
+
+def _generate_password(length: int = 12) -> str:
+    chars = string.ascii_letters + string.digits
+    while True:
+        pwd = ''.join(secrets.choice(chars) for _ in range(length))
+        if any(c.isupper() for c in pwd) and any(c.isdigit() for c in pwd):
+            return pwd
 
 
 async def login(data: SuperAdminLogin, db: AsyncSession) -> SuperAdminTokenResponse:
@@ -22,6 +32,55 @@ async def login(data: SuperAdminLogin, db: AsyncSession) -> SuperAdminTokenRespo
 
     token = create_access_token({"sub": str(admin.id), "role": "superadmin"})
     return SuperAdminTokenResponse(access_token=token)
+
+
+async def create_tenant(data: CreateTenantRequest, db: AsyncSession) -> TenantSummary:
+    slug_exists = await db.execute(select(Tenant).where(Tenant.slug == data.slug))
+    if slug_exists.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Slug already taken")
+
+    email_check = await db.execute(
+        select(User, Tenant).join(Tenant, User.tenant_id == Tenant.id).where(User.email == data.admin_email)
+    )
+    email_row = email_check.first()
+    if email_row:
+        _, existing_tenant = email_row
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email already registered under '{existing_tenant.name}'"
+        )
+
+    tenant = Tenant(name=data.company_name, slug=data.slug)
+    db.add(tenant)
+    await db.flush()
+
+    temp_password = _generate_password()
+    admin = User(
+        tenant_id=tenant.id,
+        email=data.admin_email,
+        full_name=data.admin_full_name,
+        hashed_password=hash_password(temp_password),
+        role=UserRole.admin,
+    )
+    db.add(admin)
+    await db.flush()
+
+    await email_service.send_welcome_email(
+        email=data.admin_email,
+        full_name=data.admin_full_name,
+        temp_password=temp_password,
+        company_name=data.company_name,
+    )
+
+    return TenantSummary(
+        id=tenant.id,
+        name=tenant.name,
+        slug=tenant.slug,
+        is_active=tenant.is_active,
+        created_at=tenant.created_at,
+        user_count=1,
+        applicant_count=0,
+    )
 
 
 async def list_tenants(db: AsyncSession, page: int = 1, per_page: int = 20) -> dict:

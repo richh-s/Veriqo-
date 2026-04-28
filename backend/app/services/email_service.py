@@ -28,6 +28,37 @@ async def send_workflow_email(to_email: str, to_name: str, subject: str, body: s
         return False
 
 
+async def send_welcome_email(email: str, full_name: str, temp_password: str, company_name: str) -> None:
+    if not settings.RESEND_API_KEY:
+        print(f"MOCK WELCOME EMAIL to {email}: company={company_name}, password={temp_password}")
+        return
+
+    params = {
+        "from": "Veriqo <onboarding@resend.dev>",
+        "to": [email],
+        "subject": f"Welcome to Veriqo — Your {company_name} account is ready",
+        "html": f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0;">
+                <h2 style="color: #2563eb;">Welcome to Veriqo!</h2>
+                <p>Hello {full_name},</p>
+                <p>Your company account <strong>{company_name}</strong> has been created on Veriqo. You are the account administrator.</p>
+                <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0; font-size: 14px; color: #64748b;">Your login credentials:</p>
+                    <p style="margin: 10px 0 0 0; font-size: 16px;"><strong>Email:</strong> {email}</p>
+                    <p style="margin: 5px 0 0 0; font-size: 16px;"><strong>Temporary Password:</strong> {temp_password}</p>
+                </div>
+                <p style="color: #dc2626; font-size: 14px;">Please change your password after your first login.</p>
+                <a href="http://localhost:3000/login" style="display: inline-block; background-color: #2563eb; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 10px;">Login to Dashboard</a>
+                <p style="margin-top: 30px; font-size: 12px; color: #94a3b8;">— The Veriqo Team</p>
+            </div>
+        """,
+    }
+    try:
+        resend.Emails.send(params)
+    except Exception as e:
+        print(f"Failed to send welcome email via Resend: {e}")
+
+
 async def send_deactivation_email(email: str, full_name: str) -> None:
     if not settings.RESEND_API_KEY:
         print(f"MOCK EMAIL to {email}: Account deactivated for {full_name}")

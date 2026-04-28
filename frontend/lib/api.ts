@@ -221,6 +221,10 @@ export const api = {
       request<{ access_token: string }>('/api/v1/superadmin/login', {
         method: 'POST', body: JSON.stringify(data),
       }),
+    createTenant: (data: { company_name: string; slug: string; admin_email: string; admin_full_name: string }) =>
+      superadminRequest<TenantSummary>('/api/v1/superadmin/tenants', {
+        method: 'POST', body: JSON.stringify(data),
+      }),
     listTenants: (params?: { page?: number; per_page?: number }) =>
       superadminRequest<PaginatedResponse<TenantSummary>>(
         `/api/v1/superadmin/tenants${buildQuery(params ?? {})}`

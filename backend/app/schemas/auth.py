@@ -67,7 +67,7 @@ class InviteUserRequest(BaseModel):
     full_name: str
     email: EmailStr
     password: str
-    role: UserRole = UserRole.clerk
+    role: UserRole = UserRole.admin
 
     @field_validator("password")
     @classmethod

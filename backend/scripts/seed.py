@@ -85,21 +85,21 @@ async def seed():
         else:
             print("· Admin already exists, skipping")
 
-        # ── Clerk user ────────────────────────────────────────────
-        existing_clerk = await db.execute(select(User).where(User.email == "clerk@acme.com"))
-        if not existing_clerk.scalar_one_or_none():
-            clerk = User(
+        # ── Second admin (formerly clerk) ─────────────────────────
+        existing_bob = await db.execute(select(User).where(User.email == "bob@acme.com"))
+        if not existing_bob.scalar_one_or_none():
+            bob = User(
                 tenant_id=tenant.id,
-                email="clerk@acme.com",
-                full_name="Bob Clerk",
+                email="bob@acme.com",
+                full_name="Bob Smith",
                 hashed_password=hash_password("Admin123"),
-                role=UserRole.clerk,
+                role=UserRole.admin,
             )
-            db.add(clerk)
+            db.add(bob)
             await db.flush()
-            print("✓ Clerk created: clerk@acme.com / Admin123")
+            print("✓ Admin created: bob@acme.com / Admin123")
         else:
-            print("· Clerk already exists, skipping")
+            print("· Bob already exists, skipping")
 
         # ── Applicants ────────────────────────────────────────────
         applicant_data = [

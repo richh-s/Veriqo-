@@ -27,3 +27,10 @@ class TenantSummary(BaseModel):
 
 class TenantToggle(BaseModel):
     is_active: bool
+
+
+class CreateTenantRequest(BaseModel):
+    company_name: str
+    slug: str
+    admin_email: EmailStr
+    admin_full_name: str

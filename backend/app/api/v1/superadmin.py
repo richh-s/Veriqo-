@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.api.deps import get_current_superadmin
 from app.models.superadmin import SuperAdmin
-from app.schemas.superadmin import SuperAdminLogin, SuperAdminTokenResponse, TenantSummary, TenantToggle
+from app.schemas.superadmin import SuperAdminLogin, SuperAdminTokenResponse, TenantSummary, TenantToggle, CreateTenantRequest
 from app.services import superadmin_service
 
 router = APIRouter()
@@ -17,6 +17,15 @@ async def superadmin_login(
     db: AsyncSession = Depends(get_db),
 ):
     return await superadmin_service.login(data, db)
+
+
+@router.post("/tenants", response_model=TenantSummary, status_code=201)
+async def create_tenant(
+    data: CreateTenantRequest,
+    current_admin: SuperAdmin = Depends(get_current_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await superadmin_service.create_tenant(data, db)
 
 
 @router.get("/tenants", response_model=dict)

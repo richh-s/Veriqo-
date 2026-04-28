@@ -12,10 +12,10 @@ from app.services import auth_service
 router = APIRouter()
 
 
-@router.post("/register", response_model=TokenResponse, status_code=201)
+@router.post("/register", status_code=403)
 @limiter.limit("100/minute")
-async def register(request: Request, data: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    return await auth_service.register_tenant(data, db)
+async def register(request: Request):
+    raise HTTPException(status_code=403, detail="Self-registration is disabled. Contact your administrator.")
 
 
 @router.post("/login", response_model=TokenResponse)
