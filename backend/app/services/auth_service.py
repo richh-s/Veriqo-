@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.audit_log import AuditAction
-from app.schemas.auth import RegisterRequest, LoginRequest, InviteUserRequest, RefreshRequest, TokenResponse, UserOut
+from app.schemas.auth import RegisterRequest, LoginRequest, InviteUserRequest, RefreshRequest, TokenResponse, UserOut, UserUpdateRequest
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.services import audit_service, email_service
 import uuid
@@ -94,6 +94,28 @@ async def refresh_token(data: RefreshRequest, db: AsyncSession) -> TokenResponse
         access_token=create_access_token(claims),
         refresh_token=create_refresh_token(claims),
     )
+
+
+async def update_user(user_id: uuid.UUID, tenant_id: uuid.UUID, data: UserUpdateRequest, db: AsyncSession) -> UserOut:
+    result = await db.execute(select(User).where(User.id == user_id, User.tenant_id == tenant_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    was_active = user.is_active
+    user.is_active = data.is_active
+    await db.flush()
+    if was_active and not data.is_active:
+        await email_service.send_deactivation_email(email=user.email, full_name=user.full_name)
+    return UserOut.model_validate(user)
+
+
+async def list_users(tenant_id: uuid.UUID, db: AsyncSession) -> list[UserOut]:
+    result = await db.execute(
+        select(User)
+        .where(User.tenant_id == tenant_id)
+        .order_by(User.created_at.asc())
+    )
+    return [UserOut.model_validate(u) for u in result.scalars().all()]
 
 
 async def invite_user(data: InviteUserRequest, tenant_id: uuid.UUID, inviter_id: uuid.UUID, db: AsyncSession) -> UserOut:

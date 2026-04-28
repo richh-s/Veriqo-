@@ -28,6 +28,32 @@ async def send_workflow_email(to_email: str, to_name: str, subject: str, body: s
         return False
 
 
+async def send_deactivation_email(email: str, full_name: str) -> None:
+    if not settings.RESEND_API_KEY:
+        print(f"MOCK EMAIL to {email}: Account deactivated for {full_name}")
+        return
+
+    params = {
+        "from": "Veriqo <onboarding@resend.dev>",
+        "to": [email],
+        "subject": "Your Veriqo account has been deactivated",
+        "html": f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0;">
+                <h2 style="color: #dc2626;">Account Deactivated</h2>
+                <p>Hello {full_name},</p>
+                <p>Your Veriqo account has been <strong>deactivated</strong> by an administrator.</p>
+                <p>You will no longer be able to log in to the platform.</p>
+                <p style="margin-top: 24px;">If you believe this was done in error, please contact your workspace administrator.</p>
+                <p style="margin-top: 30px; font-size: 12px; color: #94a3b8;">— The Veriqo Team</p>
+            </div>
+        """,
+    }
+    try:
+        resend.Emails.send(params)
+    except Exception as e:
+        print(f"Failed to send deactivation email via Resend: {e}")
+
+
 async def send_invitation_email(email: str, full_name: str, temp_password: str, role: str):
     if not settings.RESEND_API_KEY:
         print(f"MOCK EMAIL to {email}: Welcome {full_name}! Your temporary password is {temp_password}")

@@ -99,6 +99,20 @@ async def create_instance(
     if not applicant:
         raise HTTPException(status_code=404, detail="Applicant not found")
 
+    existing = await db.execute(
+        select(WorkflowInstance).where(
+            WorkflowInstance.tenant_id == tenant_id,
+            WorkflowInstance.applicant_id == applicant.id,
+            WorkflowInstance.workflow_id == workflow.id,
+            WorkflowInstance.status == InstanceStatus.in_progress,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"{applicant.first_name} {applicant.last_name} already has an active instance for this workflow",
+        )
+
     now = datetime.now(timezone.utc)
     instance = WorkflowInstance(
         tenant_id=tenant_id,

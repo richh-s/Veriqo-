@@ -131,6 +131,8 @@ export const api = {
       }),
     me: () => request<User>('/api/v1/auth/me'),
     listUsers: () => request<User[]>('/api/v1/auth/users'),
+    updateUser: (id: string, data: { is_active: boolean }) =>
+      request<User>(`/api/v1/auth/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     invite: (data: InviteUserRequest) =>
       request<User>('/api/v1/auth/invite', {
         method: 'POST', body: JSON.stringify(data),

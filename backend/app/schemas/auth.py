@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from uuid import UUID
+from datetime import datetime
 from app.models.user import UserRole
 
 
@@ -53,8 +54,13 @@ class UserOut(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool
+    created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserUpdateRequest(BaseModel):
+    is_active: bool
 
 
 class InviteUserRequest(BaseModel):

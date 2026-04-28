@@ -29,12 +29,18 @@ export default function WorkflowDetailPage() {
   const [selectedApp, setSelectedApp] = useState('')
   const [starting, setStarting]     = useState(false)
   const [startError, setStartError] = useState('')
+  const [activeApplicantIds, setActiveApplicantIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     async function load() {
-      const [wf, apps] = await Promise.all([api.workflows.get(id), api.applicants.list()])
+      const [wf, apps, instances] = await Promise.all([
+        api.workflows.get(id),
+        api.applicants.list({ per_page: 100 }),
+        api.instances.list({ workflow_id: id, status: 'in_progress', per_page: 100 }),
+      ])
       setWorkflow(wf)
       setApplicants(apps.items)
+      setActiveApplicantIds(new Set(instances.items.map((i) => i.applicant_id)))
       setLoading(false)
     }
     load()
@@ -134,9 +140,15 @@ export default function WorkflowDetailPage() {
               <Select value={selectedApp} onValueChange={setSelectedApp}>
                 <SelectTrigger><SelectValue placeholder="Select applicant…" /></SelectTrigger>
                 <SelectContent>
-                  {applicants.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.first_name} {a.last_name} — {a.email}</SelectItem>
-                  ))}
+                  {applicants.map((a) => {
+                    const hasActive = activeApplicantIds.has(a.id)
+                    return (
+                      <SelectItem key={a.id} value={a.id} disabled={hasActive}>
+                        {a.first_name} {a.last_name} — {a.email}
+                        {hasActive && ' (active instance exists)'}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

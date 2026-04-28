@@ -32,10 +32,8 @@ async def list_notifications(
     per_page: int = 20,
     unread_only: bool = False,
 ) -> PaginatedResponse[NotificationOut]:
-    query = select(Notification).where(
-        Notification.tenant_id == tenant_id,
-        Notification.user_id == user_id,
-    )
+    # Notifications are tenant-wide — all users in a tenant see the same alerts
+    query = select(Notification).where(Notification.tenant_id == tenant_id)
     if unread_only:
         query = query.where(Notification.is_read == False)  # noqa: E712
 
@@ -59,7 +57,6 @@ async def count_unread(tenant_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSessio
     result = await db.execute(
         select(func.count()).where(
             Notification.tenant_id == tenant_id,
-            Notification.user_id == user_id,
             Notification.is_read == False,  # noqa: E712
         )
     )
@@ -76,7 +73,6 @@ async def mark_read(
         update(Notification)
         .where(
             Notification.tenant_id == tenant_id,
-            Notification.user_id == user_id,
             Notification.id.in_(notification_ids),
         )
         .values(is_read=True)
@@ -88,7 +84,6 @@ async def mark_all_read(tenant_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSessi
         update(Notification)
         .where(
             Notification.tenant_id == tenant_id,
-            Notification.user_id == user_id,
             Notification.is_read == False,  # noqa: E712
         )
         .values(is_read=True)

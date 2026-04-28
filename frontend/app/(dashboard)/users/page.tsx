@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Users, UserPlus, Mail, Shield, User as UserIcon, MoreVertical, Trash2, Power } from 'lucide-react'
+import { Users, UserPlus, Shield, User as UserIcon, PowerOff, Power } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,15 +19,15 @@ export default function TeamPage() {
   const [inviteForm, setInviteForm] = useState({
     email: '',
     full_name: '',
-    password: '', // In a real app we'd send an invite link, but for demo we set password
+    password: '',
     role: 'clerk' as 'admin' | 'clerk'
   })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [toggling, setToggling] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
+  useEffect(() => { loadUsers() }, [])
+
 
   async function loadUsers() {
     setLoading(true)
@@ -52,6 +52,16 @@ export default function TeamPage() {
       setError(err.message || 'Invitation failed')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleToggleActive(user: UserOut) {
+    setToggling(user.id)
+    try {
+      const updated = await api.auth.updateUser(user.id, { is_active: !user.is_active })
+      setUsers((prev) => prev.map((u) => u.id === updated.id ? updated : u))
+    } finally {
+      setToggling(null)
     }
   }
 
@@ -149,7 +159,7 @@ export default function TeamPage() {
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Joined</TableHead>
-              <TableHead className="text-right">Manage</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -194,9 +204,25 @@ export default function TeamPage() {
                     {formatDate(user.created_at)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
+                    {user.is_active ? (
+                      <button
+                        onClick={() => handleToggleActive(user)}
+                        disabled={toggling === user.id}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                      >
+                        <PowerOff className="h-3.5 w-3.5" />
+                        {toggling === user.id ? 'Deactivating…' : 'Deactivate'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleToggleActive(user)}
+                        disabled={toggling === user.id}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 transition-colors disabled:opacity-50"
+                      >
+                        <Power className="h-3.5 w-3.5" />
+                        {toggling === user.id ? 'Activating…' : 'Activate'}
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))
