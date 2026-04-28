@@ -11,7 +11,8 @@ from app.models.workflow_instance import WorkflowInstance, WorkflowStepInstance,
 from app.models.audit_log import AuditAction
 from app.schemas.workflow_instance import WorkflowInstanceCreate, StepInstanceUpdate, WorkflowInstanceOut
 from app.schemas.common import PaginatedResponse
-from app.services import groq_service, audit_service, notification_service
+from app.services import groq_service, audit_service, notification_service, email_service
+from app.models.communication_log import CommunicationLog, Direction
 
 
 async def _load_instance(
@@ -265,6 +266,8 @@ async def regenerate_email_draft(
         raise HTTPException(status_code=404, detail="Step instance not found")
     if step_instance.step.step_type != StepType.email:
         raise HTTPException(status_code=400, detail="Step is not an email step")
+    if not settings_groq_enabled():
+        raise HTTPException(status_code=400, detail="GROQ_API_KEY is not configured. Add it to your .env to enable AI drafting.")
 
     ap_result = await db.execute(
         select(Applicant).where(Applicant.id == instance.applicant_id)
@@ -273,12 +276,94 @@ async def regenerate_email_draft(
     if not applicant:
         raise HTTPException(status_code=404, detail="Applicant not found")
 
-    draft = await groq_service.draft_verification_email(
-        applicant_name=f"{applicant.first_name} {applicant.last_name}",
-        step_name=step_instance.step.name,
-        step_config=step_instance.step.config,
-    )
+    try:
+        draft = await groq_service.draft_verification_email(
+            applicant_name=f"{applicant.first_name} {applicant.last_name}",
+            step_name=step_instance.step.name,
+            step_config=step_instance.step.config,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     step_instance.email_draft = draft
+    await db.flush()
+
+    instance = await _load_instance(instance_id, tenant_id, db)
+    return WorkflowInstanceOut.model_validate(instance)
+
+
+async def save_email_draft(
+    instance_id: uuid.UUID,
+    step_instance_id: uuid.UUID,
+    draft: str,
+    tenant_id: uuid.UUID,
+    db: AsyncSession,
+) -> WorkflowInstanceOut:
+    instance = await _load_instance(instance_id, tenant_id, db)
+    step_instance = next(
+        (si for si in instance.step_instances if si.id == step_instance_id), None
+    )
+    if not step_instance:
+        raise HTTPException(status_code=404, detail="Step instance not found")
+    if step_instance.step.step_type != StepType.email:
+        raise HTTPException(status_code=400, detail="Step is not an email step")
+    step_instance.email_draft = draft
+    await db.flush()
+    instance = await _load_instance(instance_id, tenant_id, db)
+    return WorkflowInstanceOut.model_validate(instance)
+
+
+async def send_step_email(
+    instance_id: uuid.UUID,
+    step_instance_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> WorkflowInstanceOut:
+    instance = await _load_instance(instance_id, tenant_id, db)
+
+    step_instance = next(
+        (si for si in instance.step_instances if si.id == step_instance_id), None
+    )
+    if not step_instance:
+        raise HTTPException(status_code=404, detail="Step instance not found")
+    if not step_instance.email_draft:
+        raise HTTPException(status_code=400, detail="No email draft to send")
+
+    ap_result = await db.execute(
+        select(Applicant).where(Applicant.id == instance.applicant_id)
+    )
+    applicant = ap_result.scalar_one_or_none()
+    if not applicant:
+        raise HTTPException(status_code=404, detail="Applicant not found")
+
+    # Extract subject from first line if it starts with "Subject:"
+    lines = step_instance.email_draft.strip().splitlines()
+    subject = "Background Check — Action Required"
+    body = step_instance.email_draft
+    if lines and lines[0].lower().startswith("subject:"):
+        subject = lines[0][len("subject:"):].strip()
+        body = "\n".join(lines[1:]).strip()
+
+    await email_service.send_workflow_email(
+        to_email=applicant.email,
+        to_name=f"{applicant.first_name} {applicant.last_name}",
+        subject=subject,
+        body=body,
+    )
+
+    # Auto-log to communication log
+    comm = CommunicationLog(
+        tenant_id=tenant_id,
+        instance_id=instance_id,
+        step_instance_id=step_instance_id,
+        logged_by_id=user_id,
+        direction=Direction.sent,
+        recipient_email=applicant.email,
+        recipient_name=f"{applicant.first_name} {applicant.last_name}",
+        subject=subject,
+        body=body,
+    )
+    db.add(comm)
     await db.flush()
 
     instance = await _load_instance(instance_id, tenant_id, db)

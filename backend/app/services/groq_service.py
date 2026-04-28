@@ -1,4 +1,4 @@
-from groq import AsyncGroq
+from groq import AsyncGroq, PermissionDeniedError, AuthenticationError, RateLimitError, APIConnectionError, APIStatusError
 from app.core.config import settings
 
 _client: AsyncGroq | None = None
@@ -11,12 +11,16 @@ def get_groq_client() -> AsyncGroq:
     return _client
 
 
+def reset_groq_client() -> None:
+    global _client
+    _client = None
+
+
 async def draft_verification_email(
     applicant_name: str,
     step_name: str,
     step_config: dict | None = None,
 ) -> str:
-    """Use Groq LLM to auto-draft a professional verification email for an email step."""
     recipient = (step_config or {}).get("recipient_role", "the relevant party")
     subject_hint = (step_config or {}).get("subject", "")
 
@@ -38,10 +42,21 @@ Requirements:
 Write only the email, nothing else."""
 
     client = get_groq_client()
-    response = await client.chat.completions.create(
-        model=settings.GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=600,
-    )
-    return response.choices[0].message.content or ""
+    try:
+        response = await client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=600,
+        )
+        return response.choices[0].message.content or ""
+    except (PermissionDeniedError, AuthenticationError) as e:
+        reset_groq_client()
+        raise RuntimeError(f"Groq access denied — check your API key or network: {e}") from e
+    except RateLimitError as e:
+        raise RuntimeError("Groq rate limit hit — wait a moment and try again") from e
+    except APIConnectionError as e:
+        reset_groq_client()
+        raise RuntimeError("Could not reach Groq API — check network connectivity") from e
+    except APIStatusError as e:
+        raise RuntimeError(f"Groq API error {e.status_code}: {e.message}") from e

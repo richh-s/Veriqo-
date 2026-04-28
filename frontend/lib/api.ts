@@ -69,6 +69,13 @@ async function request<T>(
   })
 
   if (res.status === 401) {
+    // No token was sent — this is a login failure (wrong credentials).
+    // Let the form handle it; never redirect from a public endpoint.
+    if (!token) {
+      const err = await res.json().catch(() => ({ detail: 'Invalid credentials' }))
+      throw new Error(err.detail ?? 'Invalid credentials')
+    }
+
     const isSuperadmin = path.startsWith('/api/v1/superadmin')
     if (!isSuperadmin && tokenOverride === undefined) {
       // Attempt silent token refresh before giving up
@@ -163,8 +170,16 @@ export const api = {
       request<WorkflowInstance>(`/api/v1/instances/${instanceId}/steps/${stepId}`, {
         method: 'PATCH', body: JSON.stringify(data),
       }),
+    saveDraft: (instanceId: string, stepId: string, draft: string) =>
+      request<WorkflowInstance>(`/api/v1/instances/${instanceId}/steps/${stepId}/email-draft`, {
+        method: 'PATCH', body: JSON.stringify({ draft }),
+      }),
     draftEmail: (instanceId: string, stepId: string) =>
       request<WorkflowInstance>(`/api/v1/instances/${instanceId}/steps/${stepId}/draft-email`, {
+        method: 'POST',
+      }),
+    sendEmail: (instanceId: string, stepId: string) =>
+      request<WorkflowInstance>(`/api/v1/instances/${instanceId}/steps/${stepId}/send-email`, {
         method: 'POST',
       }),
   },

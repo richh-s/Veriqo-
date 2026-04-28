@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.workflow_instance import InstanceStatus
-from app.schemas.workflow_instance import WorkflowInstanceCreate, StepInstanceUpdate, WorkflowInstanceOut
+from app.schemas.workflow_instance import WorkflowInstanceCreate, StepInstanceUpdate, EmailDraftUpdate, WorkflowInstanceOut
 from app.schemas.common import PaginatedResponse
 from app.services import workflow_instance_service
 
@@ -66,6 +66,22 @@ async def advance_step(
     )
 
 
+@router.patch(
+    "/{instance_id}/steps/{step_instance_id}/email-draft",
+    response_model=WorkflowInstanceOut,
+)
+async def save_email_draft(
+    instance_id: UUID,
+    step_instance_id: UUID,
+    data: EmailDraftUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await workflow_instance_service.save_email_draft(
+        instance_id, step_instance_id, data.draft, current_user.tenant_id, db
+    )
+
+
 @router.post(
     "/{instance_id}/steps/{step_instance_id}/draft-email",
     response_model=WorkflowInstanceOut,
@@ -78,4 +94,19 @@ async def regenerate_email_draft(
 ):
     return await workflow_instance_service.regenerate_email_draft(
         instance_id, step_instance_id, current_user.tenant_id, db
+    )
+
+
+@router.post(
+    "/{instance_id}/steps/{step_instance_id}/send-email",
+    response_model=WorkflowInstanceOut,
+)
+async def send_step_email(
+    instance_id: UUID,
+    step_instance_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await workflow_instance_service.send_step_email(
+        instance_id, step_instance_id, current_user.tenant_id, current_user.id, db
     )

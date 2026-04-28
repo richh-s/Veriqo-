@@ -14,6 +14,10 @@ class StepInstanceUpdate(BaseModel):
     notes: str | None = None
 
 
+class EmailDraftUpdate(BaseModel):
+    draft: str
+
+
 class StepInstanceOut(BaseModel):
     id: UUID
     instance_id: UUID

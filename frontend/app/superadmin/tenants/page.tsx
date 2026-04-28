@@ -15,6 +15,7 @@ export default function SuperAdminTenantsPage() {
   const [page, setPage]         = useState(1)
   const [loading, setLoading]   = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
+  const [error, setError]       = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -31,12 +32,15 @@ export default function SuperAdminTenantsPage() {
   async function handleToggle(tenant: TenantSummary) {
     const action = tenant.is_active ? 'disable' : 'enable'
     if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} tenant "${tenant.name}"?`)) return
+    setError(null)
     setToggling(tenant.id)
     try {
       const updated = await api.superadmin.toggleTenant(tenant.id, !tenant.is_active)
       setResult((prev) =>
         prev ? { ...prev, items: prev.items.map((t) => t.id === updated.id ? updated : t) } : prev
       )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed')
     } finally {
       setToggling(null)
     }
@@ -48,6 +52,19 @@ export default function SuperAdminTenantsPage() {
         <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">Active Tenants</h2>
         <p className="text-sm text-gray-500">Monitor and manage all corporate accounts on the Veriqo platform.</p>
       </div>
+
+      {error && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700 font-medium">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <Card className="overflow-hidden border-gray-200 shadow-sm">
         {loading ? (

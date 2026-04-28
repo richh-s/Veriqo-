@@ -4,6 +4,30 @@ from app.core.config import settings
 if settings.RESEND_API_KEY:
     resend.api_key = settings.RESEND_API_KEY
 
+async def send_workflow_email(to_email: str, to_name: str, subject: str, body: str) -> bool:
+    if not settings.RESEND_API_KEY:
+        print(f"MOCK WORKFLOW EMAIL to {to_email}: {subject}")
+        return False
+
+    html_body = body.replace('\n', '<br>')
+    params = {
+        "from": "Veriqo <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": subject,
+        "html": f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                {html_body}
+            </div>
+        """,
+    }
+    try:
+        resend.Emails.send(params)
+        return True
+    except Exception as e:
+        print(f"Failed to send workflow email via Resend: {e}")
+        return False
+
+
 async def send_invitation_email(email: str, full_name: str, temp_password: str, role: str):
     if not settings.RESEND_API_KEY:
         print(f"MOCK EMAIL to {email}: Welcome {full_name}! Your temporary password is {temp_password}")

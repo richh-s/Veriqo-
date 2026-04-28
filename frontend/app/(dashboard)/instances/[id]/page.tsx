@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, RefreshCw, Copy, Check, Mail, MessageSquarePlus, SendHorizontal, Inbox } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Copy, Check, Mail, MessageSquarePlus, SendHorizontal, Inbox, Send } from 'lucide-react'
 import { Navbar } from '@/components/shared/navbar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -31,8 +31,13 @@ export default function InstanceDetailPage() {
   const [loading, setLoading]     = useState(true)
   const [advancing, setAdvancing] = useState<string | null>(null)
   const [drafting, setDrafting]   = useState<string | null>(null)
+  const [sending, setSending]     = useState<string | null>(null)
+  const [sent, setSent]           = useState<string | null>(null)
   const [copied, setCopied]       = useState<string | null>(null)
+  const [draftError, setDraftError] = useState<string | null>(null)
   const [notes, setNotes]         = useState<Record<string, string>>({})
+  const [localDrafts, setLocalDrafts] = useState<Record<string, string>>({})
+  const [savingDraft, setSavingDraft] = useState<string | null>(null)
 
   // Communication log state
   const [comms, setComms]             = useState<CommunicationLog[]>([])
@@ -51,6 +56,14 @@ export default function InstanceDetailPage() {
         api.applicants.get(inst.applicant_id),
         api.workflows.get(inst.workflow_id),
       ])
+      // Initialise local drafts from saved values (only on first load)
+      setLocalDrafts((prev) => {
+        const init: Record<string, string> = { ...prev }
+        inst.step_instances.forEach((si) => {
+          if (!(si.id in init)) init[si.id] = si.email_draft ?? ''
+        })
+        return init
+      })
       setInstance(inst)
       setApplicant(app)
       setWorkflow(wf)
@@ -106,11 +119,48 @@ export default function InstanceDetailPage() {
 
   async function handleRegenerateDraft(stepInstance: StepInstance) {
     setDrafting(stepInstance.id)
+    setDraftError(null)
     try {
       const updated = await api.instances.draftEmail(id, stepInstance.id)
+      const newSi = updated.step_instances.find((si) => si.id === stepInstance.id)
+      if (newSi?.email_draft) {
+        setLocalDrafts((prev) => ({ ...prev, [stepInstance.id]: newSi.email_draft! }))
+      }
       setInstance(updated)
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : 'AI drafting failed')
     } finally {
       setDrafting(null)
+    }
+  }
+
+  async function handleSaveDraft(stepInstance: StepInstance) {
+    const draft = localDrafts[stepInstance.id] ?? ''
+    setSavingDraft(stepInstance.id)
+    try {
+      const updated = await api.instances.saveDraft(id, stepInstance.id, draft)
+      setInstance(updated)
+    } finally {
+      setSavingDraft(null)
+    }
+  }
+
+  async function handleSendEmail(stepInstance: StepInstance) {
+    const localDraft = localDrafts[stepInstance.id] ?? ''
+    if (!localDraft.trim()) return
+    setSending(stepInstance.id)
+    try {
+      // Auto-save draft if it differs from what's persisted
+      if (localDraft !== (stepInstance.email_draft ?? '')) {
+        await api.instances.saveDraft(id, stepInstance.id, localDraft)
+      }
+      const updated = await api.instances.sendEmail(id, stepInstance.id)
+      setInstance(updated)
+      setSent(stepInstance.id)
+      setTimeout(() => setSent(null), 3000)
+      await loadComms()
+    } finally {
+      setSending(null)
     }
   }
 
@@ -280,6 +330,14 @@ export default function InstanceDetailPage() {
           )}
         </Card>
 
+        {/* AI draft error banner */}
+        {draftError && (
+          <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm text-red-700">{draftError}</p>
+            <button onClick={() => setDraftError(null)} className="text-red-400 hover:text-red-600 text-lg leading-none shrink-0">×</button>
+          </div>
+        )}
+
         {/* Step instances */}
         <div className="space-y-3">
           {instance.step_instances.map((si, idx) => {
@@ -308,41 +366,80 @@ export default function InstanceDetailPage() {
                   </div>
                 </div>
 
-                {/* Email draft (for email-type steps with a draft) */}
-                {wfStep?.step_type === 'email' && si.email_draft && (
-                  <div className="mx-4 mb-3 rounded-md border border-gray-200 bg-white">
-                    <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-                      <span className="text-xs font-medium text-gray-500">AI-drafted email</span>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 text-xs"
-                          disabled={drafting === si.id}
-                          onClick={() => handleRegenerateDraft(si)}
-                        >
-                          <RefreshCw className={`h-3 w-3 ${drafting === si.id ? 'animate-spin' : ''}`} />
-                          Regenerate
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => handleCopy(si.email_draft!, si.id)}
-                        >
-                          {copied === si.id ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
-                          {copied === si.id ? 'Copied' : 'Copy'}
-                        </Button>
+                {/* Email draft — always shown for email-type steps */}
+                {wfStep?.step_type === 'email' && (() => {
+                  const localDraft = localDrafts[si.id] ?? ''
+                  const isDirty = localDraft !== (si.email_draft ?? '')
+                  const hasContent = localDraft.trim().length > 0
+                  return (
+                    <div className="mx-4 mb-3 rounded-md border border-gray-200 bg-white">
+                      <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+                        <span className="text-xs font-medium text-gray-500">
+                          Email draft
+                          {isDirty && hasContent && (
+                            <span className="ml-1.5 text-amber-500">• unsaved</span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 text-xs"
+                            disabled={drafting === si.id}
+                            onClick={() => handleRegenerateDraft(si)}
+                          >
+                            <RefreshCw className={`h-3 w-3 ${drafting === si.id ? 'animate-spin' : ''}`} />
+                            {drafting === si.id ? 'Generating…' : si.email_draft ? 'Regenerate' : 'Generate with AI'}
+                          </Button>
+                          {isDirty && hasContent && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              disabled={savingDraft === si.id}
+                              onClick={() => handleSaveDraft(si)}
+                            >
+                              {savingDraft === si.id ? 'Saving…' : 'Save draft'}
+                            </Button>
+                          )}
+                          {hasContent && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => handleCopy(localDraft, si.id)}
+                              >
+                                {copied === si.id ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
+                                {copied === si.id ? 'Copied' : 'Copy'}
+                              </Button>
+                              <Button
+                                size="sm"
+                                className={`h-7 gap-1 text-xs ${sent === si.id ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                                disabled={sending === si.id || sent === si.id}
+                                onClick={() => handleSendEmail(si)}
+                              >
+                                {sent === si.id
+                                  ? <><Check className="h-3 w-3" />Sent!</>
+                                  : sending === si.id
+                                    ? <>Sending…</>
+                                    : <><Send className="h-3 w-3" />Send</>
+                                }
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
+                      <Textarea
+                        className="border-0 rounded-none rounded-b-md text-xs font-mono text-gray-700 resize-none focus-visible:ring-0 bg-transparent min-h-[120px]"
+                        value={localDraft}
+                        onChange={(e) => setLocalDrafts((prev) => ({ ...prev, [si.id]: e.target.value }))}
+                        placeholder={`Type your email here…\n\nTip: Start with "Subject: Your subject line" on the first line, then leave a blank line before the body.\n\nOr click "Generate with AI" to auto-draft (requires GROQ_API_KEY).`}
+                        rows={8}
+                      />
                     </div>
-                    <Textarea
-                      className="border-0 rounded-none rounded-b-md text-xs font-mono text-gray-700 resize-none focus:ring-0 bg-transparent min-h-[120px]"
-                      value={si.email_draft}
-                      readOnly
-                      rows={8}
-                    />
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Notes + actions for active step */}
                 {isActive && (
