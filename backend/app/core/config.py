@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama3-8b-8192"
+    RESEND_API_KEY: str = ""
     ALLOWED_ORIGINS: list[str] = ["*"]
 
     class Config:

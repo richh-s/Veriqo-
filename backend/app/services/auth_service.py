@@ -6,7 +6,7 @@ from app.models.tenant import Tenant
 from app.models.audit_log import AuditAction
 from app.schemas.auth import RegisterRequest, LoginRequest, InviteUserRequest, RefreshRequest, TokenResponse, UserOut
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
-from app.services import audit_service
+from app.services import audit_service, email_service
 import uuid
 
 
@@ -119,6 +119,14 @@ async def invite_user(data: InviteUserRequest, tenant_id: uuid.UUID, inviter_id:
         entity_type="user",
         entity_id=user.id,
         metadata={"invited_email": data.email},
+    )
+
+    # Send invitation email via Resend
+    await email_service.send_invitation_email(
+        email=data.email,
+        full_name=data.full_name,
+        temp_password=data.password,
+        role=data.role
     )
 
     return UserOut.model_validate(user)
