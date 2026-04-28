@@ -1,0 +1,42 @@
+name: veriqo
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: veriqo-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: checkflow
+    # ports:
+    #   - "5433:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: veriqo-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/checkflow
+      SECRET_KEY: "checkflow-dev-secret-key-32-chars-min"
+      GROQ_API_KEY: "GROQ_API_KEY_REDACTED"
+      GROQ_MODEL: "llama-3.1-8b-instant"
+      RESEND_API_KEY: "RESEND_API_KEY_REDACTED"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: veriqo-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+# pgdata/ is a bind-mount — data lives in this folder on your host.
+# docker-compose down (even with -v) will NOT delete it.
+# To fully reset: rm -rf pgdata/

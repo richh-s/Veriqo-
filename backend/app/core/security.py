@@ -17,7 +17,13 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(subject: dict[str, Any]) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {**subject, "exp": expire}
+    payload = {**subject, "exp": expire, "type": "access"}
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def create_refresh_token(subject: dict[str, Any]) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
+    payload = {**subject, "exp": expire, "type": "refresh"}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

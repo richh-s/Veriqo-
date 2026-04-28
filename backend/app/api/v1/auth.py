@@ -1,0 +1,79 @@
+from fastapi import APIRouter, Depends, Request, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.api.deps import get_current_user, get_current_admin
+from app.core.limiter import limiter
+from app.models.user import User
+from app.schemas.auth import RegisterRequest, LoginRequest, RefreshRequest, TokenResponse, UserOut, UserUpdateRequest, InviteUserRequest, ResetPasswordResponse, ChangePasswordRequest
+from uuid import UUID
+from app.services import auth_service
+
+router = APIRouter()
+
+
+@router.post("/register", status_code=403)
+@limiter.limit("100/minute")
+async def register(request: Request):
+    raise HTTPException(status_code=403, detail="Self-registration is disabled. Contact your administrator.")
+
+
+@router.post("/login", response_model=TokenResponse)
+@limiter.limit("100/minute")
+async def login(request: Request, data: LoginRequest, db: AsyncSession = Depends(get_db)):
+    return await auth_service.login(data, db)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    return await auth_service.refresh_token(data, db)
+
+
+@router.get("/me", response_model=UserOut)
+async def me(current_user: User = Depends(get_current_user)):
+    return UserOut.model_validate(current_user)
+
+
+@router.get("/users", response_model=list[UserOut])
+async def list_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await auth_service.list_users(current_user.tenant_id, db)
+
+
+@router.patch("/users/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: UUID,
+    data: UserUpdateRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await auth_service.update_user(user_id, current_user.tenant_id, data, db)
+
+
+@router.post("/users/{user_id}/reset-password", response_model=ResetPasswordResponse)
+async def reset_user_password(
+    user_id: UUID,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await auth_service.reset_user_password(user_id, current_user.tenant_id, db)
+
+
+@router.post("/me/change-password", status_code=204)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await auth_service.change_own_password(current_user.id, data, db)
+
+
+@router.post("/invite", response_model=UserOut, status_code=201)
+async def invite_user(
+    data: InviteUserRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await auth_service.invite_user(data, current_user.tenant_id, current_user.id, db)
