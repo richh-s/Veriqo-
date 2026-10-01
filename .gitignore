@@ -29,7 +29,6 @@
 **/.env.production.local
 
 # IDEs
-**/.vscode/
 **/.idea/
 **/.DS_Store
 **/Thumbs.db
